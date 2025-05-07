@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <ranges>
 #include <sstream>
 #include <fstream>
 #include <cstdlib>
@@ -9,14 +10,14 @@
 
 /** todo: work in progress */
 
-refinement_list* greedy(state_merger* merger){
+refinement_list *greedy(state_merger *merger) {
     std::cerr << "starting greedy merging" << std::endl;
     merger->get_eval()->initialize_after_adding_traces(merger);
 
-    auto* all_refs = new refinement_list();
+    auto *all_refs = new refinement_list();
 
-    refinement* best_ref = merger->get_best_refinement();
-    while( best_ref != nullptr ){
+    refinement *best_ref = merger->get_best_refinement();
+    while (best_ref != nullptr) {
         std::cout << " ";
         best_ref->print_short();
         std::cout << " ";
@@ -30,18 +31,25 @@ refinement_list* greedy(state_merger* merger){
     return all_refs;
 };
 
-void bagging(state_merger* merger, std::string output_file, int nr_estimators){
+void bagging(state_merger *merger, std::string output_file, int nr_estimators) {
     std::cerr << "starting bagging" << std::endl;
-    for(int i = 0; i < nr_estimators; ++i){
-        refinement_list* all_refs = greedy(merger);
 
-        for(refinement_list::reverse_iterator it = all_refs->rbegin(); it != all_refs->rend(); ++it){
-            (*it)->undo(merger);
+
+
+    for (int i = 0; i < nr_estimators; ++i) {
+        refinement_list *all_refs = greedy(merger);
+        // Write the created Model
+
+        for (auto &all_ref: std::ranges::reverse_view(*all_refs)) {
+            all_ref->undo(merger);
         }
-        for(refinement_list::iterator it = all_refs->begin(); it != all_refs->end(); ++it){
-            (*it)->erase();
+        for (auto &all_ref: *all_refs) {
+            all_ref->erase();
         }
         delete all_refs;
     }
     std::cerr << "ended bagging" << std::endl;
 };
+
+
+

@@ -83,7 +83,9 @@ add_library(Source STATIC
         input/streaming.cpp
         input/streaming.h
         input/parsers/reader_strategy.cpp
-        input/parsers/reader_strategy.h)
+        input/parsers/reader_strategy.h
+        Model.cpp
+        Model.h)
 
 ## create CMakeLists.txt in evaluation directory
 set(cmakelists_eval "evaluation/CMakeLists.txt")
