@@ -23,7 +23,7 @@ class Model {
 
 private:
 	NodeMap nodes; // Owns all nodes of the Model
-	ModelNode *root{}; // Non-owning pointer to the root node
+	ModelNode* root{}; // Non-owning pointer to the root node
 
 public:
 
@@ -32,10 +32,12 @@ public:
 
 	~Model() = default;
 
-	static std::unique_ptr<Model> from_state_merger(state_merger *merger);
+	static std::unique_ptr<Model> from_state_merger(state_merger* merger);
 
 	/** Evaluate traces **/
-	int evaluate(trace *trace);
+//	int evaluate(trace* trace);
+
+	void write_dot(std::ostream& output) const;
 };
 
 
@@ -61,9 +63,9 @@ public:
 
 	~ModelNode() = default;
 
-	static std::unique_ptr<ModelNode> from_apta_node(apta_node *apta_node);
+	static std::unique_ptr<ModelNode> from_apta_node(apta_node* apta_node);
 
-	void add_edges(apta_node *apta_node, NodeMap *node_map);
+	void add_edges(apta_node* apta_node, NodeMap* node_map);
 
 	friend class Model;
 };
@@ -77,16 +79,16 @@ private:
 	/** Count of traces in the training set that follow this edge **/
 	int count;
 	/** Node the edge finishes at **/
-	ModelNode *target;
+	ModelNode* target;
 
 public:
 	/** constructors and initializers **/
-	ModelEdge(int label, int count, ModelNode *target) :
+	ModelEdge(int label, int count, ModelNode* target) :
 			label(label), count(count), target(target) {}
 
 	~ModelEdge() = default;
 
-	inline ModelNode *get_target() { return target; };
+	friend class Model;
 };
 
 

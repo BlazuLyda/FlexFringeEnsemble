@@ -7,6 +7,7 @@
 #include "refinement.h"
 #include "greedy.h"
 #include "parameters.h"
+#include "Model.h"
 
 /** todo: work in progress */
 
@@ -34,12 +35,16 @@ refinement_list *greedy(state_merger *merger) {
 void bagging(state_merger *merger, std::string output_file, int nr_estimators) {
     std::cerr << "starting bagging" << std::endl;
 
-
+	std::vector<std::unique_ptr<Model>> models = {};
 
     for (int i = 0; i < nr_estimators; ++i) {
         refinement_list *all_refs = greedy(merger);
-        // Write the created Model
 
+        // Save the created model
+		auto new_model = Model::from_state_merger(merger);
+		models.push_back(std::move(new_model));
+
+		// Undo the whole learning process
         for (auto &all_ref: std::ranges::reverse_view(*all_refs)) {
             all_ref->undo(merger);
         }
@@ -48,6 +53,14 @@ void bagging(state_merger *merger, std::string output_file, int nr_estimators) {
         }
         delete all_refs;
     }
+
+	// Write the model
+	std::ofstream output(output_file + "_model_1.dot");
+	if (output.fail()) {
+		throw std::ofstream::failure("Unable to open file for writing: " + output_file);
+	}
+	models.at(0).get()->write_dot(output);
+
     std::cerr << "ended bagging" << std::endl;
 };
 

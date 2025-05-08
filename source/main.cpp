@@ -191,7 +191,7 @@ void run() {
         eval->initialize_after_adding_traces(merger);
         LOG_S(INFO) << "Bagging mode selected, starting run";
 
-        bagging(merger, OUTPUT_FILE,10);
+        bagging(merger, OUTPUT_FILE,1);
     } else if(OPERATION_MODE == "interactive") {
         std::cout << "interactive mode selected" << std::endl;
 
