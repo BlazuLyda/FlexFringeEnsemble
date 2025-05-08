@@ -54,14 +54,15 @@ void bagging(state_merger *merger, std::string output_file, int nr_estimators) {
         delete all_refs;
     }
 
-	// Write the model
-	std::ofstream output(output_file + "_model_1.dot");
-	if (output.fail()) {
-		throw std::ofstream::failure("Unable to open file for writing: " + output_file);
-	}
-	models.at(0).get()->write_dot(output);
-
     std::cerr << "ended bagging" << std::endl;
+
+    // Write the model
+    std::cerr << "writing model 1" << std::endl;
+    std::ofstream output(output_file + "_model_1.dot");
+    if (output.fail()) {
+        throw std::ofstream::failure("Unable to open file for writing: " + output_file);
+    }
+    models.at(0)->write_dot(output);
 };
 
 

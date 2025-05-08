@@ -5,6 +5,7 @@ build/
 test-reports/
 *.o
 *.a
+.vs/
 
 # Binaries
 runtests

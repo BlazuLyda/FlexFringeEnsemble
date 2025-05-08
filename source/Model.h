@@ -33,6 +33,7 @@ public:
 	~Model() = default;
 
 	static std::unique_ptr<Model> from_state_merger(state_merger* merger);
+	static std::unique_ptr<Model> from_apta_json(std::istream& input_stream);
 
 	/** Evaluate traces **/
 //	int evaluate(trace* trace);
@@ -47,7 +48,7 @@ private:
 	/** Unique numeric id of the node within the Model */
 	int number;
 	/** Is this a sink state? Denotes sink type. */
-	int sink;
+	int sink = 0;
 	/** Count of traces in the training set that go through this node. */
 	int size;
 	/** Count of traces in the training set that finish in this node. */
@@ -58,8 +59,8 @@ private:
 
 public:
 	/** constructors and initializers **/
-	ModelNode(int number, int sink, int size, int final) :
-			number(number), sink(sink), size(size), final(final) {}
+	ModelNode(const int number, const int size, const int final) :
+			number(number), size(size), final(final) {}
 
 	~ModelNode() = default;
 
