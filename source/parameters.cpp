@@ -123,5 +123,5 @@ int DIFF_SIZE = 1000;
 int DIFF_MAX_LENGTH = 50;
 double DIFF_MIN = -100.0;
 
-
+int NR_ESTIMATORS = 10;
 

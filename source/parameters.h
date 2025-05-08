@@ -138,4 +138,6 @@ extern int IDENTICAL_KTAIL;
 
 extern bool STAR_FREE;
 extern bool SINK_TYPE;
+
+extern int NR_ESTIMATORS;
 #endif

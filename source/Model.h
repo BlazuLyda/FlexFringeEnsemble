@@ -36,7 +36,7 @@ public:
 	static std::unique_ptr<Model> from_apta_json(std::istream& input_stream);
 
 	/** Evaluate traces **/
-//	int evaluate(trace* trace);
+	// int evaluate(trace* trace);
 
 	void write_dot(std::ostream& output) const;
 };
@@ -44,7 +44,6 @@ public:
 
 class ModelNode {
 
-private:
 	/** Unique numeric id of the node within the Model */
 	int number;
 	/** Is this a sink state? Denotes sink type. */
@@ -74,7 +73,6 @@ public:
 
 class ModelEdge {
 
-private:
 	/** The numeric label of the transition. Represents a member of the alphabet. **/
 	int label;
 	/** Count of traces in the training set that follow this edge **/
@@ -84,7 +82,7 @@ private:
 
 public:
 	/** constructors and initializers **/
-	ModelEdge(int label, int count, ModelNode* target) :
+	ModelEdge(const int label, const int count, ModelNode* target) :
 			label(label), count(count), target(target) {}
 
 	~ModelEdge() = default;

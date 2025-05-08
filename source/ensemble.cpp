@@ -32,7 +32,7 @@ refinement_list *greedy(state_merger *merger) {
     return all_refs;
 };
 
-void bagging(state_merger *merger, std::string output_file, int nr_estimators) {
+void bagging(state_merger *merger, std::string output_file, const int nr_estimators) {
     std::cerr << "starting bagging" << std::endl;
 
 	std::vector<std::unique_ptr<Model>> models = {};
@@ -40,15 +40,18 @@ void bagging(state_merger *merger, std::string output_file, int nr_estimators) {
     for (int i = 0; i < nr_estimators; ++i) {
         refinement_list *all_refs = greedy(merger);
 
-        // Save the created model
+        // Create model for further evaluation using the merged apta
 		auto new_model = Model::from_state_merger(merger);
 		models.push_back(std::move(new_model));
 
+        // Save the merged apta to a file
+        merger->print_json(output_file + ".model." + std::to_string(i) + ".json");
+
 		// Undo the whole learning process
-        for (auto &all_ref: std::ranges::reverse_view(*all_refs)) {
+        for (const auto &all_ref: std::ranges::reverse_view(*all_refs)) {
             all_ref->undo(merger);
         }
-        for (auto &all_ref: *all_refs) {
+        for (const auto &all_ref: *all_refs) {
             all_ref->erase();
         }
         delete all_refs;

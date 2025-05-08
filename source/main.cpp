@@ -191,7 +191,7 @@ void run() {
         eval->initialize_after_adding_traces(merger);
         LOG_S(INFO) << "Bagging mode selected, starting run";
 
-        bagging(merger, OUTPUT_FILE,1);
+        bagging(merger, OUTPUT_FILE, NR_ESTIMATORS);
     } else if(OPERATION_MODE == "interactive") {
         std::cout << "interactive mode selected" << std::endl;
 
@@ -413,6 +413,9 @@ int main(int argc, char *argv[]){
     app.add_option("--distancemetric", DISTANCE_METRIC_SKETCHES, "The distance metric when comparing the sketches. 1 hoeffding-bound and cosine-similarity for score, 2 hoeffding bound in both, 3 like 1 but pooled. Default: 1");
     app.add_option("--randominitialization", RANDOM_INITIALIZATION_SKETCHES, "If 0 (zero), then initialize CMS deterministically. Elsewise, CMS becomes random. Default: 0.");
     app.add_option("--futuresteps", NSTEPS_SKETCHES, "Number of steps into future when storing future in sketches. Default: 2.");
+
+    // parameters for the ensemble alergia
+    app.add_option("--nrestimators", NR_ESTIMATORS, "Number of estimators to be produced for the ensemble");
 
     CLI11_PARSE(app, argc, argv)
 

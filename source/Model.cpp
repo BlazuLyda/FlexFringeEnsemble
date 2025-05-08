@@ -136,10 +136,10 @@ std::unique_ptr<Model> Model::from_apta_json(std::istream &input_stream) {
             const std::string count_str = transition_count.value();
             int symbol = inputdata_locator::get()->symbol_from_string(symbol_str);
             const auto edge = ModelEdge(symbol, std::stoi(count_str), nullptr);
-            node->edges[symbol] = edge;
+            node->edges.insert({symbol, edge});
         }
 
-        model->nodes[node_json["id"]] = std::move(node);
+        model->nodes.insert({node_json["id"], std::move(node)});
 
         // If id is 0 set the root
         if (node_json["id"] == 0) {
