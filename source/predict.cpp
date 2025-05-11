@@ -531,3 +531,30 @@ void predict_streaming(state_merger* m, parser& parser, reader_strategy& strateg
         trace_maybe = idat.read_trace(parser, strategy);
     }
 }
+
+void predict_streaming_ensemble(const Ensemble* ensemble, parser& parser, reader_strategy& strategy, std::ofstream& output) {
+    // output << "row nr; abbadingo trace; state sequence; score sequence";
+    // if(SLIDING_WINDOW) output << "; score per sw tail; score first sw tail; root cause sw tail score; row nrs first sw tail";
+    // if(PREDICT_ALIGN) output << "; alignment; num misaligned";
+    // if(PREDICT_TRACE) output << "; sum scores; mean scores; min score";
+    // if(PREDICT_TYPE) output << "; trace type; type probability; predicted trace type; predicted type probability";
+    // if(PREDICT_SYMBOL) output << "; next trace symbol; next symbol probability; predicted symbol; predicted symbol probability";
+    // output << std::endl;
+
+    inputdata idat = inputdata::with_alphabet_from(*inputdata_locator::get());
+
+    std::optional<trace*> trace_maybe = idat.read_trace(parser, strategy);
+
+    while (trace_maybe) {
+        const auto trace = *trace_maybe;
+        const int prediction = ensemble->predict(trace);
+
+        // Write the prediction to the output
+        output << prediction << std::endl;
+
+        // TODO: Deleting the traces should probably also invalidate the trace pointers in inputdata,
+        //  but since we have a separate inputdata local to this function it is sort of ok here?
+        trace->erase();
+        trace_maybe = idat.read_trace(parser, strategy);
+    }
+}

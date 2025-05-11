@@ -36,7 +36,10 @@ public:
 	static std::unique_ptr<Model> from_apta_json(std::istream& input_stream);
 
 	/** Evaluate traces **/
-	// int evaluate(trace* trace);
+	/** todo: implement this */
+	int evaluate(trace* trace) {
+		return 0;
+	}
 
 	void write_dot(std::ostream& output) const;
 };

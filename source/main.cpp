@@ -192,6 +192,54 @@ void run() {
         LOG_S(INFO) << "Bagging mode selected, starting run";
 
         bagging(merger, OUTPUT_FILE, NR_ESTIMATORS);
+    } else if (OPERATION_MODE == "gen_ensemble") {
+        std::cout << "ensemble generation mode selected" << std::endl;
+
+        eval->initialize_before_adding_traces();
+        id.add_traces_to_apta(the_apta);
+        eval->initialize_after_adding_traces(merger);
+        LOG_S(INFO) << "Ensemble generation mode selected, starting run";
+
+        auto factory = std::make_unique<EnsembleFactory>();
+        factory->generate(Random, merger, OUTPUT_FILE, NR_ESTIMATORS);
+
+    } else if (OPERATION_MODE == "pred_ensemble") {
+        std::cout << "ensemble prediction mode selected" << std::endl;
+        LOG_S(INFO) << "Ensemble prediction mode selected, starting run";
+
+        if(!APTA_FILE.empty()){
+
+            // First, we load the ensemble
+            auto ensemble = EnsembleFactory::load(APTA_FILE);
+
+            // Setup output file stream
+            std::ostringstream res_stream;
+            res_stream << APTA_FILE << ".result";
+            std::ofstream output(res_stream.str().c_str());
+
+            // We stream the to predict traces into inputdata one by one to save memory
+            // Set up the parser for the input stream
+            std::ifstream input_stream(INPUT_FILE);
+            std::unique_ptr<parser> parser;
+            if(INPUT_FILE.ends_with(".csv")) {
+                parser = std::make_unique<csv_parser>(input_stream, csv::CSVFormat().trim({' '}));
+            } else {
+                parser = std::make_unique<abbadingoparser>(input_stream);
+            }
+
+            // Set up the reading strategy. Currently only sliding window and in-order traces are supported
+            std::unique_ptr<reader_strategy> strategy;
+            if (SLIDING_WINDOW) {
+                strategy = std::make_unique<slidingwindow>(SLIDING_WINDOW_SIZE, SLIDING_WINDOW_STRIDE, SLIDING_WINDOW_TYPE);
+            } else {
+                strategy = std::make_unique<in_order>();
+            }
+
+            predict_streaming_ensemble(ensemble.get(), *parser, *strategy, output);
+        } else {
+            std::cerr << "require a json formatted apta file to make predictions" << std::endl;
+        }
+
     } else if(OPERATION_MODE == "interactive") {
         std::cout << "interactive mode selected" << std::endl;
 

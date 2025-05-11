@@ -4,6 +4,7 @@
 #ifndef FLEXFRINGE_PREDICT_H
 #define FLEXFRINGE_PREDICT_H
 
+#include "ensemble.h"
 #include "state_merger.h"
 #include "input/inputdata.h"
 
@@ -14,5 +15,6 @@ double compute_score(apta_node* next_node, tail* next_tail);
 
 [[maybe_unused]] void predict(state_merger* m, inputdata& idat, std::ofstream& output);
 void predict_streaming(state_merger* m, parser& parser, reader_strategy& strategy, std::ofstream& output);
+void predict_streaming_ensemble(const Ensemble* ensemble, parser& parser, reader_strategy& strategy, std::ofstream& output);
 
 #endif //FLEXFRINGE_PREDICT_H
