@@ -7,13 +7,45 @@
 #include "input/inputdatalocator.h"
 #include "utility/loguru.hpp"
 
-std::unique_ptr<Model> Model::from_state_merger(state_merger* merger) {
+
+double Model::evaluate(trace* trace) const {
+
+    auto node_it = root;
+    auto trace_it = trace->get_head();
+    double prob = 1;
+
+    // std::cout << "Starting evaluation on model " << id << std::endl;
+    // Iterate through the trace while keeping the position in the graph
+    while (trace_it != nullptr && !trace_it->is_final()) {
+        // Get the transition corresponding to the trace symbol
+        auto transition = node_it->follow(trace_it->get_symbol());
+        // If trace follows a non-existing transition
+        if (!transition) {
+            // std::cout << "Followed a non-existing path: " << trace_it->get_symbol() << std::endl;
+            return 0;
+        }
+        // Update the probability
+        prob *= static_cast<double>(transition.value().get().count) / node_it->size;
+        // Move the iterators by one step
+        node_it = transition.value().get().get_target();
+        // std::cout << "Followed to node: " << node_it->number << ", with path: " << trace_it->get_symbol() << std::endl;
+        trace_it = trace_it->future();
+    }
+
+    // Now check if the trace ends in an accepting state
+    // std::cout << "Finished in node: " << node_it->number << " with final count: " << node_it->final << std::endl;
+    if (node_it->final == 0) return 0;
+    prob *= static_cast<double>(node_it->final) / node_it->size;
+    return prob;
+}
+
+std::unique_ptr<Model> Model::from_state_merger(int id, state_merger* merger) {
     // Get the apta from the merger
     apta* apta = merger->get_aut();
     apta_node* root = apta->get_root();
 
     // Create a new model
-    auto model = std::make_unique<Model>();
+    auto model = std::make_unique<Model>(id);
 
     // Copy all the apta nodes
     for (auto ait = merged_APTA_iterator(root); *ait != nullptr; ++ait) {
@@ -106,10 +138,10 @@ void Model::write_dot(std::ostream &out) const {
 }
 
 
-std::unique_ptr<Model> Model::from_apta_json(std::istream &input_stream) {
+std::unique_ptr<Model> Model::from_apta_json(int id, std::istream &input_stream) {
 
     json read_apta = json::parse(input_stream);
-    auto model = std::make_unique<Model>();
+    auto model = std::make_unique<Model>(id);
 
     // Initialize the locator
     for (auto &i: read_apta["types"]) {
@@ -129,9 +161,13 @@ std::unique_ptr<Model> Model::from_apta_json(std::istream &input_stream) {
         int node_final = node_json["data"]["total_final"];
 
         auto node = std::make_unique<ModelNode>(node_number, node_size, node_final);
+        // If id is -1 set the root
+        if (node->number == -1) {
+            model->root = node.get();
+        }
 
         // Extract the transition counts from the node data
-        for (auto& transition_count : node_json["trans_counts"].items()){
+        for (auto& transition_count : node_json["data"]["trans_counts"].items()){
             const std::string symbol_str = transition_count.key();
             const std::string count_str = transition_count.value();
             int symbol = inputdata_locator::get()->symbol_from_string(symbol_str);
@@ -139,12 +175,14 @@ std::unique_ptr<Model> Model::from_apta_json(std::istream &input_stream) {
             node->edges.insert({symbol, edge});
         }
 
+        // Transfer the ownership to the model object
         model->nodes.insert({node_json["id"], std::move(node)});
+    }
 
-        // If id is 0 set the root
-        if (node_json["id"] == 0) {
-            model->root = node.get();
-        }
+    // If root node not found throw exception
+    if (model->root == nullptr) {
+        std::cerr << "The model root is not specified\n";
+        throw std::runtime_error("The model root is not specified");
     }
 
     // Parse the edges data to add the targets
@@ -174,3 +212,4 @@ std::unique_ptr<Model> Model::from_apta_json(std::istream &input_stream) {
 
     return model;
 }
+

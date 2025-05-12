@@ -544,6 +544,7 @@ void predict_streaming_ensemble(const Ensemble* ensemble, parser& parser, reader
     inputdata idat = inputdata::with_alphabet_from(*inputdata_locator::get());
 
     std::optional<trace*> trace_maybe = idat.read_trace(parser, strategy);
+    // TODO: Add code to also evaluate the test accuracy if a flag is specified
 
     while (trace_maybe) {
         const auto trace = *trace_maybe;

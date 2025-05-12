@@ -21,29 +21,57 @@ typedef std::map<int, std::unique_ptr<ModelNode>> NodeMap;
  */
 class Model {
 
-private:
+	int id = 0;
 	NodeMap nodes; // Owns all nodes of the Model
 	ModelNode* root{}; // Non-owning pointer to the root node
 
 public:
 
 	/** constructors and initializers **/
-	Model() = default;
+	explicit Model(const int id): id(id) {};
 
 	~Model() = default;
 
-	static std::unique_ptr<Model> from_state_merger(state_merger* merger);
-	static std::unique_ptr<Model> from_apta_json(std::istream& input_stream);
+	static std::unique_ptr<Model> from_state_merger(int id, state_merger* merger);
+	static std::unique_ptr<Model> from_apta_json(int id, std::istream& input_stream);
 
-	/** Evaluate traces **/
-	/** todo: implement this */
-	int evaluate(trace* trace) {
-		return 0;
+
+	/**
+	 * Returns the probability of the trace occurring in the model.
+	 * @param trace the trace to be evaluated
+	 * @return 0 if impossible, >0 if trace ends up in an accepting state
+	 */
+	double evaluate(trace* trace) const;
+
+	int get_id() const {
+		return id;
 	}
 
 	void write_dot(std::ostream& output) const;
 };
 
+class ModelEdge {
+
+	/** The numeric label of the transition. Represents a member of the alphabet. **/
+	int symbol;
+	/** Count of traces in the training set that follow this edge **/
+	int count;
+	/** Node the edge finishes at **/
+	ModelNode* target;
+
+public:
+	/** constructors and initializers **/
+	ModelEdge(const int symbol, const int count, ModelNode* target) :
+			symbol(symbol), count(count), target(target) {}
+
+	~ModelEdge() = default;
+
+	ModelNode* get_target() const {
+		return target;
+	}
+
+	friend class Model;
+};
 
 class ModelNode {
 
@@ -70,28 +98,15 @@ public:
 
 	void add_edges(apta_node* apta_node, NodeMap* node_map);
 
-	friend class Model;
-};
-
-
-class ModelEdge {
-
-	/** The numeric label of the transition. Represents a member of the alphabet. **/
-	int label;
-	/** Count of traces in the training set that follow this edge **/
-	int count;
-	/** Node the edge finishes at **/
-	ModelNode* target;
-
-public:
-	/** constructors and initializers **/
-	ModelEdge(const int label, const int count, ModelNode* target) :
-			label(label), count(count), target(target) {}
-
-	~ModelEdge() = default;
+	[[nodiscard]] std::optional<std::reference_wrapper<const ModelEdge>> follow(const int symbol) const {
+		const auto it = edges.find(symbol);
+		if (it == edges.end()) {
+			return std::nullopt;
+		}
+		return std::cref(it->second);
+	}
 
 	friend class Model;
 };
-
 
 #endif //FLEXFRINGE_MODEL_H

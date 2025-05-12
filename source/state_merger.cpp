@@ -1091,7 +1091,7 @@ state_merger::~state_merger(){
 //    delete aut;
 //    delete eval;
 //    delete dat;
-    std::cerr << "deleted merger" << std::endl;
+    std::cout << "deleted merger" << std::endl;
 }
 
 int state_merger::get_num_merges() {
