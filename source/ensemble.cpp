@@ -12,34 +12,28 @@
 /** todo: work in progress */
 
 /** Ensemble methods **/
-int Ensemble::predict(trace* trace) const {
+double Ensemble::predict(trace* trace) const {
     std::cout << "Evaluating trace: " << trace->get_sequence() << std::endl;
-    // Assume the prediction can only have two outcomes: 0 or 1
     // Iterate through the models and evaluate the traces
-    int votes_zero = 0;
-    int votes_one = 0;
+    double sum_of_probs = 0;
     for (const auto& model : models) {
-        const double prediction = model->evaluate(trace);
-        std::cout << "\tModel " << model->get_id() << " predicted: " << prediction << std::endl;
-        // In majority voting, don't pay attention to value of the probability
-        if (prediction > 0) {
-            votes_one++;
-        } else {
-            votes_zero++;
-        }
+        const double prob = model.predict(trace);
+        sum_of_probs += prob;
+        std::cout << "\tModel " << model.get_id() << " predicted Pr = " << prob << std::endl;
     }
 
-    // Return majority vote
-    std::cout << "\tVotes for 1: " << votes_one << ", votes for 0: " << votes_zero << std::endl;
-    return votes_one > votes_zero;
+    // Return weighted average with equal weights
+    const double weighted_avg = sum_of_probs / static_cast<double>(models.size());
+    std::cout << "\tWeighted average: " << weighted_avg << std::endl;
+    return weighted_avg;
 }
 
 /** Ensemble Factory methods **/
-std::unique_ptr<refinement_list> greedy(state_merger* merger) {
+refinement_list greedy(state_merger* merger) {
     std::cout << "starting greedy merging" << std::endl;
     merger->get_eval()->initialize_after_adding_traces(merger);
 
-    auto all_refs = std::make_unique<refinement_list>();
+    refinement_list all_refs {};
 
     refinement* best_ref = merger->get_best_refinement();
     while (best_ref != nullptr) {
@@ -49,46 +43,38 @@ std::unique_ptr<refinement_list> greedy(state_merger* merger) {
         std::cout.flush();
 
         best_ref->doref(merger);
-        all_refs->push_back(best_ref);
+        all_refs.push_back(best_ref);
         best_ref = merger->get_best_refinement();
     }
     std::cout << "no more possible merges" << std::endl;
     return all_refs;
 }
 
-void bagging(state_merger* merger, std::string output_file, const int nr_estimators) {
+void bagging(state_merger* merger, const std::string& output_file, const int nr_estimators) {
     std::cout << "starting bagging" << std::endl;
 
-    std::vector<std::unique_ptr<Model> > models = {};
+    std::vector<Model> models = {};
 
     for (int i = 1; i <= nr_estimators; ++i) {
         auto all_refs = greedy(merger);
 
         // Create model for further evaluation using the merged apta
-        auto new_model = Model::from_state_merger(i, merger);
-        models.push_back(std::move(new_model));
+        Model new_model = Model::from_state_merger(i, merger);
+        models.push_back(new_model);
 
         // Save the merged apta to a file
         merger->print_json(output_file + ".model." + std::to_string(i) + ".json");
 
         // Undo the whole learning process
-        for (const auto &all_ref: std::ranges::reverse_view(*all_refs)) {
+        for (const auto &all_ref: std::ranges::reverse_view(all_refs)) {
             all_ref->undo(merger);
         }
-        for (const auto &all_ref: *all_refs) {
+        for (const auto &all_ref: all_refs) {
             all_ref->erase();
         }
     }
 
     std::cout << "ended bagging" << std::endl;
-
-    // Write the model
-    std::cout << "writing model 1" << std::endl;
-    std::ofstream output(output_file + "_model_1.dot");
-    if (output.fail()) {
-        throw std::ofstream::failure("Unable to open file for writing: " + output_file);
-    }
-    models.at(0)->write_dot(output);
 }
 
 
@@ -98,11 +84,11 @@ void bagging(state_merger* merger, std::string output_file, const int nr_estimat
  * @param merger state merger used to peform the merging process
  * @return list of refinements that lead to the creation of the model
  */
-std::unique_ptr<refinement_list> EnsembleFactory::random(state_merger* merger) {
+refinement_list EnsembleFactory::random(state_merger* merger) {
     std::cout << "starting random merging" << std::endl;
     merger->get_eval()->initialize_after_adding_traces(merger);
 
-    auto all_refs = std::make_unique<refinement_list>();
+    refinement_list all_refs {};
 
     const refinement_set* possible_refs = merger->get_possible_refinements();
     while (!possible_refs->empty()) {
@@ -115,12 +101,11 @@ std::unique_ptr<refinement_list> EnsembleFactory::random(state_merger* merger) {
         std::cout.flush();
 
         random_ref->doref(merger);
-        all_refs->push_back(random_ref);
+        all_refs.push_back(random_ref);
         possible_refs = merger->get_possible_refinements();
     }
     std::cout << "no more possible merges" << std::endl;
     return all_refs;
-
 };
 
 refinement* EnsembleFactory::get_random_ref(const refinement_set& s) {
@@ -135,7 +120,7 @@ refinement* EnsembleFactory::get_random_ref(const refinement_set& s) {
     return *it;
 }
 
-std::unique_ptr<Ensemble> EnsembleFactory::generate(
+Ensemble EnsembleFactory::generate(
     const GenerationMode mode,
     state_merger* merger,
     const std::string& output_file,
@@ -143,15 +128,15 @@ std::unique_ptr<Ensemble> EnsembleFactory::generate(
 ) {
     std::cout << "Starting the creation of ensemble with mode: " << modeToString(mode) << std::endl;
     // Initialize the ensemble object
-    auto ensemble = std::make_unique<Ensemble>();
+    Ensemble ensemble;
 
     for (int i = 1; i <= nr_estimators; ++i) {
         // Train next model
         auto all_refs = refinements_by_mode(mode, merger);
 
         // Create the model object for further evaluation
-        auto new_model = Model::from_state_merger(i, merger);
-        ensemble->add_model(std::move(new_model));
+        const auto new_model = Model::from_state_merger(i, merger);
+        ensemble.add_model(std::move(new_model));
 
         // Save the model to a file
         merger->print_json(output_file + ".model." + std::to_string(i) + ".json");
@@ -159,10 +144,10 @@ std::unique_ptr<Ensemble> EnsembleFactory::generate(
         std::cout << "Created model " << i << "/" << nr_estimators << std::endl;
 
         // Undo the whole training process
-        for (const auto &all_ref: std::ranges::reverse_view(*all_refs)) {
+        for (const auto &all_ref: std::ranges::reverse_view(all_refs)) {
             all_ref->undo(merger);
         }
-        for (const auto &all_ref: *all_refs) {
+        for (const auto &all_ref: all_refs) {
             all_ref->erase();
         }
     }
@@ -171,9 +156,9 @@ std::unique_ptr<Ensemble> EnsembleFactory::generate(
     return ensemble;
 }
 
-std::unique_ptr<Ensemble> EnsembleFactory::load(const std::string &model_path) {
+std::optional<Ensemble> EnsembleFactory::load(const std::string &model_path) {
     // Initialize the ensemble object
-    auto ensemble = std::make_unique<Ensemble>();
+    Ensemble ensemble;
 
     // Iterate through model numbers and read the model files
     int i = 1;
@@ -182,23 +167,24 @@ std::unique_ptr<Ensemble> EnsembleFactory::load(const std::string &model_path) {
         std::string filename = model_path + ".model." + std::to_string(i) + ".json";
         namespace fs = std::filesystem;
 
-        // If json file of the model exists, then read it and add to ensemble
-        if (fs::exists(filename) && fs::is_regular_file(filename)) {
-            auto file_stream = std::make_unique<std::ifstream>(filename);
-            if (file_stream->is_open()) {
-                std::cout << "Loading model " << i << " from file: " << filename << std::endl;
-                auto model = Model::from_apta_json(i, *file_stream);
-                ensemble->add_model(std::move(model));
-            } else {
-                throw std::runtime_error("Unable to open file: " + filename);
-            }
-        } else {
-            // No more model files to read
+        // Check if the model file exists, if not end reading models
+        if (!fs::exists(filename) || !fs::is_regular_file(filename)) {
             break;
         }
+        // Try to open the file
+        const auto file_stream = std::make_unique<std::ifstream>(filename);
+        if (!file_stream->is_open()) {
+            std::cerr << "Unable to open file: " << filename << std::endl;
+            return std::nullopt;
+        }
+        // Create the model from the file contents
+        std::cout << "Loading model " << i << " from file: " << filename << std::endl;
+        Model model = Model::from_apta_json(i, *file_stream);
+        ensemble.add_model(std::move(model));
+
         ++i;
     }
 
-    std::cout << "Loaded ensemble of size " << ensemble->models.size() << " for training set: " << model_path << std::endl;
+    std::cout << "Loaded ensemble of size " << ensemble.models.size() << " for training set: " << model_path << std::endl;
     return ensemble;
 };

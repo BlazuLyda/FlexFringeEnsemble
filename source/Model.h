@@ -10,67 +10,28 @@
 
 class ModelNode;
 
-class ModelEdge;
-
-typedef std::map<int, std::unique_ptr<ModelNode>> NodeMap;
-
-
-/**
- * This is a minimal copy of merged apta that provides the functionality of evaluating sample
- * traces. Used with the ensemble methods to keep track of trained models.
- */
-class Model {
-
-	int id = 0;
-	NodeMap nodes; // Owns all nodes of the Model
-	ModelNode* root{}; // Non-owning pointer to the root node
-
-public:
-
-	/** constructors and initializers **/
-	explicit Model(const int id): id(id) {};
-
-	~Model() = default;
-
-	static std::unique_ptr<Model> from_state_merger(int id, state_merger* merger);
-	static std::unique_ptr<Model> from_apta_json(int id, std::istream& input_stream);
-
-
-	/**
-	 * Returns the probability of the trace occurring in the model.
-	 * @param trace the trace to be evaluated
-	 * @return 0 if impossible, >0 if trace ends up in an accepting state
-	 */
-	double evaluate(trace* trace) const;
-
-	int get_id() const {
-		return id;
-	}
-
-	void write_dot(std::ostream& output) const;
-};
-
 class ModelEdge {
 
 	/** The numeric label of the transition. Represents a member of the alphabet. **/
 	int symbol;
 	/** Count of traces in the training set that follow this edge **/
 	int count;
-	/** Node the edge finishes at **/
-	ModelNode* target;
+	/** Number of the node that the edge finishes at **/
+	int target_nr;
 
 public:
 	/** constructors and initializers **/
-	ModelEdge(const int symbol, const int count, ModelNode* target) :
-			symbol(symbol), count(count), target(target) {}
+	ModelEdge(const int symbol, const int count, const int target_nr) :
+			symbol(symbol), count(count), target_nr(target_nr) {}
 
 	~ModelEdge() = default;
 
-	ModelNode* get_target() const {
-		return target;
+	int get_target() const {
+		return target_nr;
 	}
 
 	friend class Model;
+	friend class ModelNode;
 };
 
 class ModelNode {
@@ -84,7 +45,7 @@ class ModelNode {
 	/** Count of traces in the training set that finish in this node. */
 	int final;
 	/** Node transitions. The key is the label. **/
-	std::map<int, ModelEdge> edges;
+	std::map<int, ModelEdge> edges = {};
 
 
 public:
@@ -94,11 +55,15 @@ public:
 
 	~ModelNode() = default;
 
-	static std::unique_ptr<ModelNode> from_apta_node(apta_node* apta_node);
+	static ModelNode from_apta_node(apta_node& node);
 
-	void add_edges(apta_node* apta_node, NodeMap* node_map);
+	void add_edges_from_apta(apta_node& node);
 
-	[[nodiscard]] std::optional<std::reference_wrapper<const ModelEdge>> follow(const int symbol) const {
+	void add_edge(ModelEdge edge) {
+		edges.insert({edge.symbol, std::move(edge)});
+	}
+
+	std::optional<std::reference_wrapper<const ModelEdge>> follow(const int symbol) const {
 		const auto it = edges.find(symbol);
 		if (it == edges.end()) {
 			return std::nullopt;
@@ -107,6 +72,49 @@ public:
 	}
 
 	friend class Model;
+};
+
+/**
+ * This is a minimal copy of merged apta that provides the functionality of evaluating sample
+ * traces. Used with the ensemble methods to keep track of trained models.
+ */
+class Model {
+
+	int id = 0;
+	std::map<int, ModelNode> nodes = {}; // Owns all nodes of the Model
+	int root_number = -1; // Number of the root
+
+public:
+
+	/** constructors and initializers **/
+	explicit Model(const int id): id(id) {};
+
+	~Model() = default;
+
+	static Model from_state_merger(int id, state_merger* merger);
+	static Model from_apta_json(int id, std::istream& input_stream);
+
+
+	/**
+	 * Returns the probability of the trace occurring in the model.
+	 * @param trace the trace to be evaluated
+	 * @return 0 if impossible, >0 if trace ends up in an accepting state
+	 */
+	double predict(trace* trace) const;
+
+	int get_id() const {
+		return id;
+	}
+
+	void add_node(ModelNode node) {
+		nodes.insert({node.number, std::move(node)});
+	}
+
+	const ModelNode& get_node(const int number) const {
+		return nodes.at(number);
+	}
+
+	void write_dot(std::ostream& output) const;
 };
 
 #endif //FLEXFRINGE_MODEL_H

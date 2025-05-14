@@ -8,9 +8,9 @@
 #include "utility/loguru.hpp"
 
 
-double Model::evaluate(trace* trace) const {
+double Model::predict(trace* trace) const {
 
-    auto node_it = root;
+    const ModelNode* node = &get_node(root_number);
     auto trace_it = trace->get_head();
     double prob = 1;
 
@@ -18,80 +18,77 @@ double Model::evaluate(trace* trace) const {
     // Iterate through the trace while keeping the position in the graph
     while (trace_it != nullptr && !trace_it->is_final()) {
         // Get the transition corresponding to the trace symbol
-        auto transition = node_it->follow(trace_it->get_symbol());
+        auto transition_maybe = node->follow(trace_it->get_symbol());
         // If trace follows a non-existing transition
-        if (!transition) {
+        if (!transition_maybe) {
             // std::cout << "Followed a non-existing path: " << trace_it->get_symbol() << std::endl;
             return 0;
         }
+        const ModelEdge& transition = transition_maybe.value().get();
         // Update the probability
-        prob *= static_cast<double>(transition.value().get().count) / node_it->size;
-        // Move the iterators by one step
-        node_it = transition.value().get().get_target();
+        prob *= static_cast<double>(transition.count) / node->size;
+        // Move to the target of the transition edge
+        node = &get_node(transition.get_target());
         // std::cout << "Followed to node: " << node_it->number << ", with path: " << trace_it->get_symbol() << std::endl;
         trace_it = trace_it->future();
     }
 
     // Now check if the trace ends in an accepting state
     // std::cout << "Finished in node: " << node_it->number << " with final count: " << node_it->final << std::endl;
-    if (node_it->final == 0) return 0;
-    prob *= static_cast<double>(node_it->final) / node_it->size;
+    if (node->final == 0) return 0;
+    prob *= static_cast<double>(node->final) / node->size;
     return prob;
 }
 
-std::unique_ptr<Model> Model::from_state_merger(int id, state_merger* merger) {
+Model Model::from_state_merger(const int id, state_merger* merger) {
     // Get the apta from the merger
     apta* apta = merger->get_aut();
     apta_node* root = apta->get_root();
 
     // Create a new model
-    auto model = std::make_unique<Model>(id);
+    Model model(id);
 
     // Copy all the apta nodes
     for (auto ait = merged_APTA_iterator(root); *ait != nullptr; ++ait) {
-        // Create a new node
-        apta_node* apta_node = *ait;
-        auto new_node = ModelNode::from_apta_node(apta_node);
-        // Add the node to the model
-        model->nodes.insert({new_node->number, std::move(new_node)});
+        // Create a new node and transfer ownership to the model
+        apta_node& apta_node = **ait;
+        model.add_node(ModelNode::from_apta_node(apta_node));
     }
-    // Set the root pointer
-    model->root = model->nodes.at(root->get_number()).get();
+    // Set the root number (this is always -1?)
+    model.root_number = root->get_number();
 
     // Copy all the apta transitions
     for (auto ait = merged_APTA_iterator(root); *ait != nullptr; ++ait) {
         // Get the parent node
-        apta_node* node = *ait;
-        ModelNode* model_node = model->nodes.at(node->get_number()).get();
+        apta_node& node = **ait;
+        ModelNode& model_node = model.nodes.at(node.get_number());
         // Add the edges
-        model_node->add_edges(node, &model->nodes);
+        model_node.add_edges_from_apta(node);
     }
     return model;
 }
 
-std::unique_ptr<ModelNode> ModelNode::from_apta_node(apta_node* node) {
-    auto new_node = std::make_unique<ModelNode>(
-        node->get_number(),
-        node->get_size(), // TODO: check if these are correct, or should I always call find()
-        node->get_final()
-    );
-    return new_node;
+ModelNode ModelNode::from_apta_node(apta_node& node) {
+    return {
+        node.get_number(),
+        node.get_size(), // TODO: check if these are correct, or should I always call find()
+        node.get_final()
+    };
 }
 
-void ModelNode::add_edges(apta_node* node, NodeMap* node_map) {
-    auto* node_data = dynamic_cast<alergia_data *>(node->get_data());
+void ModelNode::add_edges_from_apta(apta_node& node) {
+    // Assume the model is trained with Alergia data
+    auto* node_data = dynamic_cast<alergia_data *>(node.get_data());
 
     // Iterate through the edges and add them
-    for (auto it = node->guards_start(); it != node->guards_end(); ++it) {
+    for (auto it = node.guards_start(); it != node.guards_end(); ++it) {
         // Get edge data
-        int label = it->first;
+        const int label = it->first;
         const int edge_count = node_data->count(it->first);
-        apta_node* child = it->second->get_target()->find();
-        ModelNode* child_node = node_map->find(child->get_number())->second.get();
+        apta_node& child = *it->second->get_target()->find();
 
         // Construct and add the edge
-        auto edge = ModelEdge(label, edge_count, child_node);
-        this->edges.insert({label, edge});
+        add_edge(ModelEdge(label, edge_count, child.get_number()));
     }
 }
 
@@ -106,42 +103,39 @@ void Model::write_dot(std::ostream &out) const {
     out << "  rankdir=LR;\n";
     out << "  node [shape=circle];\n";
 
-    for (const auto &[id, node_ptr]: nodes) {
-        ModelNode* node = node_ptr.get();
+    for (const auto &[id, node]: nodes) {
 
         // Output nodes
-        if (node->final > 0) {
+        if (node.final > 0) {
             out << "  " << id
                     << " [shape=doublecircle, label=\"" << id
-                    << " #" << node->size << "(" << node->final << ")\"];\n";
+                    << " #" << node.size << "(" << node.final << ")\"];\n";
         } else {
             out << "  " << id
                     << " [label=\"" << id
-                    << " #" << node->size << "(" << node->final << ")\"];\n";
+                    << " #" << node.size << "(" << node.final << ")\"];\n";
         }
         // Output transitions
-        for (const auto &[label, edge]: node->edges) {
-            ModelNode* target = edge.target;
-            if (target) {
-                out << "  " << id << " -> " << target->number
-                        << " [label=\"" << label << " #" << edge.count << "\"];\n";
-            }
+        for (const auto &[label, edge]: node.edges) {
+            out << "  " << id << " -> " << edge.target_nr
+                    << " [label=\"" << label << " #" << edge.count << "\"];\n";
         }
     }
 
     // Initial arrow to the root
-    if (root) {
-        out << "  init [shape=point];\n";
-        out << "  init -> " << root->number << ";\n";
-    }
+    out << "  init [shape=point];\n";
+    out << "  init -> " << root_number << ";\n";
     out << "}\n";
 }
 
 
-std::unique_ptr<Model> Model::from_apta_json(int id, std::istream &input_stream) {
+Model Model::from_apta_json(int id, std::istream &input_stream) {
 
     json read_apta = json::parse(input_stream);
-    auto model = std::make_unique<Model>(id);
+    Model model(id);
+
+    // Set the root id to -1
+    model.root_number = -1;
 
     // Initialize the locator
     for (auto &i: read_apta["types"]) {
@@ -160,29 +154,20 @@ std::unique_ptr<Model> Model::from_apta_json(int id, std::istream &input_stream)
         int node_size = node_json["size"];
         int node_final = node_json["data"]["total_final"];
 
-        auto node = std::make_unique<ModelNode>(node_number, node_size, node_final);
-        // If id is -1 set the root
-        if (node->number == -1) {
-            model->root = node.get();
-        }
+        // Create node object
+        ModelNode node(node_number, node_size, node_final);
 
         // Extract the transition counts from the node data
         for (auto& transition_count : node_json["data"]["trans_counts"].items()){
             const std::string symbol_str = transition_count.key();
             const std::string count_str = transition_count.value();
             int symbol = inputdata_locator::get()->symbol_from_string(symbol_str);
-            const auto edge = ModelEdge(symbol, std::stoi(count_str), nullptr);
-            node->edges.insert({symbol, edge});
+            // Create edge object and add it to the source node
+            node.add_edge(ModelEdge(symbol, std::stoi(count_str), -1));
         }
 
-        // Transfer the ownership to the model object
-        model->nodes.insert({node_json["id"], std::move(node)});
-    }
-
-    // If root node not found throw exception
-    if (model->root == nullptr) {
-        std::cerr << "The model root is not specified\n";
-        throw std::runtime_error("The model root is not specified");
+        // Pass the ownership of the node to the model
+        model.add_node(std::move(node));
     }
 
     // Parse the edges data to add the targets
@@ -200,14 +185,12 @@ std::unique_ptr<Model> Model::from_apta_json(int id, std::istream &input_stream)
         int source_nr = std::stoi(source_string);
         int target_nr = std::stoi(target_string);
 
-        if (!model->nodes.contains(source_nr)) continue;
-        if (!model->nodes.contains(target_nr)) continue;
-
-        ModelNode* source = model->nodes.at(source_nr).get();
-        ModelNode* target = model->nodes.at(target_nr).get();
+        if (!model.nodes.contains(source_nr)) continue;
+        if (!model.nodes.contains(target_nr)) continue;
 
         // Set the target on the edge
-        source->edges.at(symbol).target = target;
+        ModelNode& source = model.nodes.at(source_nr);
+        source.edges.at(symbol).target_nr = target_nr;
     }
 
     return model;

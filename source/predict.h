@@ -15,6 +15,9 @@ double compute_score(apta_node* next_node, tail* next_tail);
 
 [[maybe_unused]] void predict(state_merger* m, inputdata& idat, std::ofstream& output);
 void predict_streaming(state_merger* m, parser& parser, reader_strategy& strategy, std::ofstream& output);
+
+// -- Prediction functions using the new Model class --
 void predict_streaming_ensemble(const Ensemble* ensemble, parser& parser, reader_strategy& strategy, std::ofstream& output);
+void predict_streaming_single(const Model* model, parser& parser, reader_strategy& strategy, std::ofstream& output);
 
 #endif //FLEXFRINGE_PREDICT_H

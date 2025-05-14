@@ -21,6 +21,7 @@
 
 #include "parameters.h"
 #include "csv.hpp"
+#include "TestRunner.h"
 #include "input/inputdata.h"
 #include "input/inputdatalocator.h"
 #include "input/parsers/csvparser.h"
@@ -115,13 +116,13 @@ void read_input_file(inputdata* id) {
 
 /**
  * @brief Main run method. Branches out based on the type of session to run.
- * 
- * Possible sessions: 
+ *
+ * Possible sessions:
  * - batch
- * - stream 
+ * - stream
  * - inter
- * 
- * @param param The parameters. 
+ *
+ * @param param The parameters.
  */
 void run() {
     evaluation_function *eval = get_evaluation();
@@ -201,41 +202,32 @@ void run() {
         LOG_S(INFO) << "Ensemble generation mode selected, starting run";
 
         auto factory = std::make_unique<EnsembleFactory>();
-        factory->generate(Random, merger, OUTPUT_FILE, NR_ESTIMATORS);
+        EnsembleFactory::generate(Random, merger, OUTPUT_FILE, NR_ESTIMATORS);
 
     } else if (OPERATION_MODE == "pred_ensemble") {
         std::cout << "ensemble prediction mode selected" << std::endl;
         LOG_S(INFO) << "Ensemble prediction mode selected, starting run";
 
         if(!APTA_FILE.empty()){
-
-            // First, we load the ensemble
-            auto ensemble = EnsembleFactory::load(APTA_FILE);
-
-            // Setup output file stream
-            std::ostringstream res_stream;
-            res_stream << APTA_FILE << ".result";
-            std::ofstream output(res_stream.str().c_str());
-
-            // We stream the to predict traces into inputdata one by one to save memory
-            // Set up the parser for the input stream
-            std::ifstream input_stream(INPUT_FILE);
-            std::unique_ptr<parser> parser;
-            if(INPUT_FILE.ends_with(".csv")) {
-                parser = std::make_unique<csv_parser>(input_stream, csv::CSVFormat().trim({' '}));
+            if (auto runner_maybe = TestRunner<Ensemble>::create_from_ensemble(APTA_FILE)) {
+                runner_maybe.value().run(INPUT_FILE);
             } else {
-                parser = std::make_unique<abbadingoparser>(input_stream);
+                std::cerr << "Could not create a TestRunner from ensemble" << std::endl;
             }
+        } else {
+            std::cerr << "require a json formatted apta file to make predictions" << std::endl;
+        }
 
-            // Set up the reading strategy. Currently only sliding window and in-order traces are supported
-            std::unique_ptr<reader_strategy> strategy;
-            if (SLIDING_WINDOW) {
-                strategy = std::make_unique<slidingwindow>(SLIDING_WINDOW_SIZE, SLIDING_WINDOW_STRIDE, SLIDING_WINDOW_TYPE);
+    } else if (OPERATION_MODE == "pred_single") {
+        std::cout << "Single model prediction mode selected" << std::endl;
+        LOG_S(INFO) << "Single model prediction mode selected, starting run";
+
+        if (!APTA_FILE.empty()) {
+            if (auto runner_maybe = TestRunner<Model>::create_from_model(APTA_FILE)) {
+                runner_maybe.value().run(INPUT_FILE);
             } else {
-                strategy = std::make_unique<in_order>();
+                std::cerr << "Could not create a TestRunner from single model" << std::endl;
             }
-
-            predict_streaming_ensemble(ensemble.get(), *parser, *strategy, output);
         } else {
             std::cerr << "require a json formatted apta file to make predictions" << std::endl;
         }
@@ -320,9 +312,9 @@ void run() {
 }
 
 /**
- * @brief Main method. Reads in arguments and starts application 
+ * @brief Main method. Reads in arguments and starts application
  * by running "run()" function with the set of parsed parameters.
- * 
+ *
  */
 #ifndef UNIT_TESTING
 int main(int argc, char *argv[]){
