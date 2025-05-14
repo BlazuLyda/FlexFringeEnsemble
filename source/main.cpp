@@ -210,7 +210,11 @@ void run() {
 
         if(!APTA_FILE.empty()){
             if (auto runner_maybe = TestRunner<Ensemble>::create_from_ensemble(APTA_FILE)) {
-                runner_maybe.value().run(INPUT_FILE);
+                if (!SOLUTION_FILE.empty()) {
+                    runner_maybe.value().run(INPUT_FILE, SOLUTION_FILE);
+                } else {
+                    runner_maybe.value().run(INPUT_FILE);
+                }
             } else {
                 std::cerr << "Could not create a TestRunner from ensemble" << std::endl;
             }
@@ -224,7 +228,11 @@ void run() {
 
         if (!APTA_FILE.empty()) {
             if (auto runner_maybe = TestRunner<Model>::create_from_model(APTA_FILE)) {
-                runner_maybe.value().run(INPUT_FILE);
+                if (!SOLUTION_FILE.empty()) {
+                    runner_maybe.value().run(INPUT_FILE, SOLUTION_FILE);
+                } else {
+                    runner_maybe.value().run(INPUT_FILE);
+                }
             } else {
                 std::cerr << "Could not create a TestRunner from single model" << std::endl;
             }
@@ -456,6 +464,7 @@ int main(int argc, char *argv[]){
 
     // parameters for the ensemble alergia
     app.add_option("--nrestimators", NR_ESTIMATORS, "Number of estimators to be produced for the ensemble");
+    app.add_option("--solution", SOLUTION_FILE, "Optional file containing solution (target) probabilities of test traces");
 
     CLI11_PARSE(app, argc, argv)
 

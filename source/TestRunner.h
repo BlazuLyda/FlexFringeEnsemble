@@ -33,19 +33,13 @@ class TestRunner {
     std::ifstream input;
     std::ofstream output;
 
-public:
-    TestRunner(const T &predictor, std::ofstream &&output)
-        : predictor(predictor), output(std::move(output)) {
-    }
+    // Perplexity
+    bool compute_score = false;
+    std::ifstream solutions;
+    size_t sol_total_count = 0;
+    size_t sol_read_count = 0;
 
-    ~TestRunner() = default;
-
-    static std::optional<TestRunner<Ensemble>> create_from_ensemble(const std::string &model_file);
-
-    static std::optional<TestRunner<Model>> create_from_model(const std::string &model_file);
-
-
-    void init_reader(const std::string &test_file) {
+    void init_test_reader(const std::string &test_file) {
         input = std::ifstream(test_file);
 
         // We stream the to predict traces into inputdata one by one to save memory
@@ -66,14 +60,50 @@ public:
         }
     }
 
+    void init_solution_reader(const std::string &solution_file) {
+        solutions.open(solution_file);
+        if (!solutions) {
+            throw std::runtime_error("Failed to open file: " + solution_file);
+        }
+        if (!(solutions >> sol_total_count)) {
+            throw std::runtime_error("Failed to read number of traces");
+        }
+    }
+
+    double read_next_solution() {
+        if (sol_read_count >= sol_total_count) {
+            throw std::runtime_error("Exceeded the number of lines in the file");
+        }
+        if (double value; solutions >> value) {
+            ++sol_read_count;
+            return value;
+        }
+        throw std::runtime_error("Error reading value at index " + std::to_string(sol_read_count));
+    }
+
+public:
+    TestRunner(const T &predictor, std::ofstream &&output)
+        : predictor(predictor), output(std::move(output)) {
+    }
+
+    ~TestRunner() = default;
+
+    static std::optional<TestRunner<Ensemble>> create_from_ensemble(const std::string &model_file);
+
+    static std::optional<TestRunner<Model>> create_from_model(const std::string &model_file);
+
+
+
     void run(const std::string &test_file) {
         // Init the test file reader
-        init_reader(test_file);
+        init_test_reader(test_file);
 
         inputdata idat = inputdata::with_alphabet_from(*inputdata_locator::get());
 
         std::optional<trace *> trace_maybe = idat.read_trace(*test_parser, *test_reader_strategy);
-        // TODO: Add code to also evaluate the test accuracy if a flag is specified
+
+        // For computing perplexity
+        double entropy = 0;
 
         while (trace_maybe) {
             const auto trace = *trace_maybe;
@@ -82,11 +112,32 @@ public:
             // Write the prediction to the output
             output << prediction << std::endl;
 
+            // Optionally compare against solution
+            if (compute_score) {
+                const double real = read_next_solution();
+                entropy += real * log(prediction);
+                std::cout << "\tExpected probability: " << real << std::endl;
+            }
+
             // TODO: Deleting the traces should probably also invalidate the trace pointers in inputdata,
             //  but since we have a separate inputdata local to this function it is sort of ok here?
             trace->erase();
             trace_maybe = idat.read_trace(*test_parser, *test_reader_strategy);
         }
+
+        // Optionally compute perplexity
+        if (compute_score) {
+            const double perplexity = pow(2.0, -entropy);
+            output << perplexity << std::endl;
+            std::cout << "Final perplexity: " << perplexity << std::endl;
+        }
+    }
+
+    void run(const std::string &test_file, const std::string &solution_file) {
+        // Run the test file against the solutions
+        compute_score = true;
+        init_solution_reader(solution_file);
+        run(test_file);
     }
 };
 
