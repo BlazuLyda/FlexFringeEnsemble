@@ -202,7 +202,7 @@ void run() {
         LOG_S(INFO) << "Ensemble generation mode selected, starting run";
 
         auto factory = std::make_unique<EnsembleFactory>();
-        EnsembleFactory::generate(Random, merger, OUTPUT_FILE, NR_ESTIMATORS);
+        EnsembleFactory::generate(ENS_MODE, merger, OUTPUT_FILE, NR_ESTIMATORS);
 
     } else if (OPERATION_MODE == "pred_ensemble") {
         std::cout << "ensemble prediction mode selected" << std::endl;
@@ -464,6 +464,7 @@ int main(int argc, char *argv[]){
 
     // parameters for the ensemble alergia
     app.add_option("--nrestimators", NR_ESTIMATORS, "Number of estimators to be produced for the ensemble");
+    app.add_option("--ensmode", ENS_MODE, "Mode the ensemble should be trained with: ");
     app.add_option("--solution", SOLUTION_FILE, "Optional file containing solution (target) probabilities of test traces");
 
     CLI11_PARSE(app, argc, argv)

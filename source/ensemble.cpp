@@ -81,7 +81,7 @@ void bagging(state_merger* merger, const std::string& output_file, const int nr_
 /**
  * Creates a model using merge selection process that always selects a random merge from the list of available
  * consistent merges.
- * @param merger state merger used to peform the merging process
+ * @param merger state merger used to perform the merging process
  * @return list of refinements that lead to the creation of the model
  */
 refinement_list EnsembleFactory::random(state_merger* merger) {
@@ -106,13 +106,42 @@ refinement_list EnsembleFactory::random(state_merger* merger) {
     }
     std::cout << "no more possible merges" << std::endl;
     return all_refs;
+}
+
+/**
+ * Creates a model using greedy merge selection process, which always picks the best scored merge. This is intended
+ * to be used with parameters such as "--random", which multiplies the merge scores by a random number to provide
+ * some controlled nondeterminism.
+ * @param merger state merger used to perform the merging process
+ * @return list of refinements that lead to the creation of the model
+ */
+refinement_list EnsembleFactory::greedy(state_merger* merger) {
+    std::cout << "starting random merging" << std::endl;
+    merger->get_eval()->initialize_after_adding_traces(merger);
+
+    refinement_list all_refs {};
+
+    refinement* best_ref = merger->get_best_refinement();
+    while (best_ref != nullptr) {
+
+        std::cout << " ";
+        best_ref->print_short();
+        std::cout << " ";
+        std::cout.flush();
+
+        best_ref->doref(merger);
+        all_refs.push_back(best_ref);
+        best_ref = merger->get_best_refinement();
+    }
+    std::cout << "no more possible merges" << std::endl;
+    return all_refs;
 };
 
 refinement* EnsembleFactory::get_random_ref(const refinement_set& s) {
     if (s.empty()) return nullptr;
 
     static std::random_device rd;
-    static std::mt19937 gen(rd());
+    static std::mt19937 gen(rd() + std::chrono::system_clock::now().time_since_epoch().count());
     std::uniform_int_distribution dist(0, static_cast<int>(s.size() - 1));
 
     const int index = dist(gen);
@@ -121,11 +150,14 @@ refinement* EnsembleFactory::get_random_ref(const refinement_set& s) {
 }
 
 Ensemble EnsembleFactory::generate(
-    const GenerationMode mode,
+    const std::string& mode_str,
     state_merger* merger,
     const std::string& output_file,
     const int nr_estimators
 ) {
+    // Get the mode from the string
+    const GenerationMode mode = stringToMode(mode_str);
+
     std::cout << "Starting the creation of ensemble with mode: " << modeToString(mode) << std::endl;
     // Initialize the ensemble object
     Ensemble ensemble;
@@ -134,14 +166,13 @@ Ensemble EnsembleFactory::generate(
         // Train next model
         auto all_refs = refinements_by_mode(mode, merger);
 
-        // Create the model object for further evaluation
-        const auto new_model = Model::from_state_merger(i, merger);
-        ensemble.add_model(std::move(new_model));
-
         // Save the model to a file
         merger->print_json(output_file + ".model." + std::to_string(i) + ".json");
         merger->print_dot(output_file + ".model." + std::to_string(i) + ".dot");
         std::cout << "Created model " << i << "/" << nr_estimators << std::endl;
+
+        // Create the model object for further evaluation
+        ensemble.add_model(std::move(Model::from_state_merger(i, merger)));
 
         // Undo the whole training process
         for (const auto &all_ref: std::ranges::reverse_view(all_refs)) {

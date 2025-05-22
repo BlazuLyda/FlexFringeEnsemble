@@ -85,6 +85,13 @@ void ModelNode::add_edges_from_apta(apta_node& node) {
         // Get edge data
         const int label = it->first;
         const int edge_count = node_data->count(it->first);
+
+        // There is some very weird behaviour where some edges exist, but they have count 0 and
+        // their target is nullptr. TODO: Investigate this
+        if (edge_count == 0) {
+            continue;
+        }
+
         apta_node& child = *it->second->get_target()->find();
 
         // Construct and add the edge

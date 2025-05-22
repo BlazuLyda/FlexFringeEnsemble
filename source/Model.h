@@ -26,7 +26,7 @@ public:
 
 	~ModelEdge() = default;
 
-	int get_target() const {
+	[[nodiscard]] int get_target() const {
 		return target_nr;
 	}
 
@@ -59,11 +59,11 @@ public:
 
 	void add_edges_from_apta(apta_node& node);
 
-	void add_edge(ModelEdge edge) {
-		edges.insert({edge.symbol, std::move(edge)});
+	void add_edge(ModelEdge&& edge) {
+		edges.insert({edge.symbol, edge});
 	}
 
-	std::optional<std::reference_wrapper<const ModelEdge>> follow(const int symbol) const {
+	[[nodiscard]] std::optional<std::reference_wrapper<const ModelEdge>> follow(const int symbol) const {
 		const auto it = edges.find(symbol);
 		if (it == edges.end()) {
 			return std::nullopt;
@@ -102,15 +102,15 @@ public:
 	 */
 	double predict(trace* trace) const;
 
-	int get_id() const {
+	[[nodiscard]] int get_id() const {
 		return id;
 	}
 
-	void add_node(ModelNode node) {
+	void add_node(ModelNode&& node) {
 		nodes.insert({node.number, std::move(node)});
 	}
 
-	const ModelNode& get_node(const int number) const {
+	[[nodiscard]] const ModelNode& get_node(const int number) const {
 		return nodes.at(number);
 	}
 

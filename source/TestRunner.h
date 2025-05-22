@@ -103,7 +103,9 @@ public:
         std::optional<trace *> trace_maybe = idat.read_trace(*test_parser, *test_reader_strategy);
 
         // For computing perplexity
+        constexpr double EPS = 1e-30;
         double entropy = 0;
+        double perplexity = 1;
 
         while (trace_maybe) {
             const auto trace = *trace_maybe;
@@ -115,8 +117,11 @@ public:
             // Optionally compare against solution
             if (compute_score) {
                 const double real = read_next_solution();
-                entropy += real * log(prediction);
+                entropy -= real * log(prediction + EPS);
+                perplexity *= pow(prediction + EPS, -real);
                 std::cout << "\tExpected probability: " << real << std::endl;
+                std::cout << "\tPredicted probability: " << prediction << std::endl;
+                std::cout << "\tCurrent entropy: " << entropy << std::endl;
             }
 
             // TODO: Deleting the traces should probably also invalidate the trace pointers in inputdata,
@@ -127,9 +132,9 @@ public:
 
         // Optionally compute perplexity
         if (compute_score) {
-            const double perplexity = pow(2.0, -entropy);
-            output << perplexity << std::endl;
-            std::cout << "Final perplexity: " << perplexity << std::endl;
+            const double num_test_traces = sol_total_count;
+            // output << perplexity << std::endl;
+            std::cout << "Final perplexity: " << entropy / num_test_traces << std::endl;
         }
     }
 

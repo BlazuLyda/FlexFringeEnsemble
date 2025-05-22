@@ -1,9 +1,13 @@
 #include "parameters.h"
+
+#include <chrono>
 #include <random>
 
 std::uniform_real_distribution<double> unif(0.0, 1.0);
 std::default_random_engine re;
-double random_double(){ return unif(re); }
+std::random_device rd;
+std::mt19937 gen(rd() + std::chrono::system_clock::now().time_since_epoch().count());
+double random_double(){ return unif(gen); }
 
 std::string HEURISTIC_NAME = "alergia";
 std::string DATA_NAME = "default";
@@ -124,5 +128,6 @@ int DIFF_MAX_LENGTH = 50;
 double DIFF_MIN = -100.0;
 
 int NR_ESTIMATORS = 10;
+std::string ENS_MODE = "";
 std::string SOLUTION_FILE = "";
 

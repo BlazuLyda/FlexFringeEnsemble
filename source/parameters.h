@@ -140,5 +140,6 @@ extern bool STAR_FREE;
 extern bool SINK_TYPE;
 
 extern int NR_ESTIMATORS;
+extern std::string ENS_MODE;
 extern std::string SOLUTION_FILE;
 #endif
