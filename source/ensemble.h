@@ -22,15 +22,19 @@ public:
         models.push_back(std::move(model));
     }
 
+    [[nodiscard]] int next_model_id() const {
+        return static_cast<int>(models.size()) + 1;
+    }
+
     /**
-     * todo: refactor this to allow for different voting strategies
-     *
-     * Makes a prediction for the given trace. For now, uses a majority vote to merge the predictions
-     * of single models.
+     * Makes a prediction for the given trace. For now, uses a weighted average
+     * vote to merge the predictions of single models.
      * @param trace trace to make a prediction for
      * @return the prediction
      */
     double predict(trace* trace) const;
+
+    void compute_inter_model_diffs(int sample_size) const;
 
     friend class EnsembleFactory;
 };
@@ -90,11 +94,21 @@ public:
     );
 
     /**
-     * Loads an ensemble object from a collection of models.
-     * @param model_path the location of the model files
-     * @return pointer to ensemble object that can be used for evaluation
+     * Loads and adds a collection of models to the ensemble.
+     * @param ensemble the ensemble to add the models to
+     * @param model_path path descriptor of the models
+     * @param collection_size
+     * @return number of added models
      */
-    static std::optional<Ensemble> load(const std::string &model_path);
+    static int add_model_collection(Ensemble& ensemble, const std::string &model_path, int collection_size);
+
+    /**
+     * Loads and adds a single model to the ensemble.
+     * @param ensemble the ensemble to add the model to
+     * @param model_path path descriptor of the single model
+     * @return number of added models (1 or 0)
+     */
+    static int add_single_model(Ensemble& ensemble, const std::string &model_path);
 };
 
 

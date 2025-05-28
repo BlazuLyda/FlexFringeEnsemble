@@ -9,6 +9,7 @@
 #include <iostream>
 #include "evaluation_factory.h"
 #include <string>
+#include <ranges>
 #include "stream.h"
 #include "interactive.h"
 #include "searcher.h"
@@ -209,7 +210,7 @@ void run() {
         LOG_S(INFO) << "Ensemble prediction mode selected, starting run";
 
         if(!APTA_FILE.empty()){
-            if (auto runner_maybe = TestRunner<Ensemble>::create_from_ensemble(APTA_FILE)) {
+            if (auto runner_maybe = TestRunner<Ensemble>::create_from_ensemble(APTA_FILE, NR_ESTIMATORS)) {
                 if (!SOLUTION_FILE.empty()) {
                     runner_maybe.value().run(INPUT_FILE, SOLUTION_FILE);
                 } else {
@@ -236,6 +237,30 @@ void run() {
             } else {
                 std::cerr << "Could not create a TestRunner from single model" << std::endl;
             }
+        } else {
+            std::cerr << "require a json formatted apta file to make predictions" << std::endl;
+        }
+
+    } else if (OPERATION_MODE == "inter_model") {
+        std::cout << "Inter model variety mode selected" << std::endl;
+        LOG_S(INFO) << "Inter model variety mode selected, starting run";
+
+        if (!APTA_FILE.empty()) {
+            // Split the apta into model paths
+            std::vector<std::string> models;
+            for (auto part : std::views::split(APTA_FILE, ';')) {
+                models.emplace_back(part.begin(), part.end());
+            }
+            // For each model try to add it as a single. If it fails add as a collection.
+            Ensemble ensemble;
+            for (const auto& model_path : models) {
+                if (EnsembleFactory::add_single_model(ensemble, model_path) != 1) {
+                    if (EnsembleFactory::add_model_collection(ensemble, model_path, NR_ESTIMATORS) != NR_ESTIMATORS) {
+                        std::cerr << "Could not load model: " << model_path << std::endl;
+                    }
+                }
+            }
+            ensemble.compute_inter_model_diffs(SAMPLE_SIZE);
         } else {
             std::cerr << "require a json formatted apta file to make predictions" << std::endl;
         }
@@ -463,8 +488,9 @@ int main(int argc, char *argv[]){
     app.add_option("--futuresteps", NSTEPS_SKETCHES, "Number of steps into future when storing future in sketches. Default: 2.");
 
     // parameters for the ensemble alergia
-    app.add_option("--nrestimators", NR_ESTIMATORS, "Number of estimators to be produced for the ensemble");
+    app.add_option("--nrestimators", NR_ESTIMATORS, "Number of estimators to be produced for the ensemble/size of the ensemble to load");
     app.add_option("--ensmode", ENS_MODE, "Mode the ensemble should be trained with: ");
+    app.add_option("--samsize", SAMPLE_SIZE, "Size of the sample used for inter model variety check");
     app.add_option("--solution", SOLUTION_FILE, "Optional file containing solution (target) probabilities of test traces");
 
     CLI11_PARSE(app, argc, argv)

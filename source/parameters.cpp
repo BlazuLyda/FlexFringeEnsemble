@@ -127,7 +127,8 @@ int DIFF_SIZE = 1000;
 int DIFF_MAX_LENGTH = 50;
 double DIFF_MIN = -100.0;
 
-int NR_ESTIMATORS = 10;
-std::string ENS_MODE = "";
-std::string SOLUTION_FILE = "";
+int NR_ESTIMATORS = 0;
+std::string ENS_MODE;
+int SAMPLE_SIZE = 100;
+std::string SOLUTION_FILE;
 

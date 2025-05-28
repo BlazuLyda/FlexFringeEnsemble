@@ -14,6 +14,17 @@
 #include "input/parsers/abbadingoparser.h"
 #include "input/parsers/csvparser.h"
 
+/**
+ * Computes perplexity metric based on cross entropy between the real probabilities in ps and predicted
+ * probabilities in qs.
+ * @param ps real probabilities (can be unnormalized)
+ * @param qs predicted probabilities (can be unnormalized)
+ * @return the perplexity score
+ */
+double compute_perplexity(const std::vector<double> &ps, const std::vector<double> &qs);
+
+double compute_cross_entropy(const std::vector<double> &ps, const std::vector<double> &qs);
+
 template<typename P>
 concept Predictor = requires(const P &p, trace* trace)
 {
@@ -88,7 +99,7 @@ public:
 
     ~TestRunner() = default;
 
-    static std::optional<TestRunner<Ensemble>> create_from_ensemble(const std::string &model_file);
+    static std::optional<TestRunner<Ensemble>> create_from_ensemble(const std::string &model_file, int ensemble_size);
 
     static std::optional<TestRunner<Model>> create_from_model(const std::string &model_file);
 
@@ -103,9 +114,8 @@ public:
         std::optional<trace *> trace_maybe = idat.read_trace(*test_parser, *test_reader_strategy);
 
         // For computing perplexity
-        constexpr double EPS = 1e-30;
-        double entropy = 0;
-        double perplexity = 1;
+        std::vector<double> real_probs;
+        std::vector<double> predicted_probs;
 
         while (trace_maybe) {
             const auto trace = *trace_maybe;
@@ -117,11 +127,8 @@ public:
             // Optionally compare against solution
             if (compute_score) {
                 const double real = read_next_solution();
-                entropy -= real * log(prediction + EPS);
-                perplexity *= pow(prediction + EPS, -real);
-                std::cout << "\tExpected probability: " << real << std::endl;
-                std::cout << "\tPredicted probability: " << prediction << std::endl;
-                std::cout << "\tCurrent entropy: " << entropy << std::endl;
+                real_probs.push_back(real);
+                predicted_probs.push_back(prediction);
             }
 
             // TODO: Deleting the traces should probably also invalidate the trace pointers in inputdata,
@@ -132,12 +139,17 @@ public:
 
         // Optionally compute perplexity
         if (compute_score) {
-            const double num_test_traces = sol_total_count;
-            // output << perplexity << std::endl;
-            std::cout << "Final perplexity: " << entropy / num_test_traces << std::endl;
+            const double perplexity = compute_perplexity(real_probs, predicted_probs);
+            std::cout << "Final perplexity: " << perplexity << std::endl;
         }
     }
 
+    /**
+     * Evaluate all the traces in the given test set using the loaded model. Compute
+     * Perplexity score on the predictions using the provided target solutions.
+     * @param test_file name of file containing the test set
+     * @param solution_file name of file containing target probabilities
+     */
     void run(const std::string &test_file, const std::string &solution_file) {
         // Run the test file against the solutions
         compute_score = true;

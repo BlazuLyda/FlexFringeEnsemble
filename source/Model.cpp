@@ -3,7 +3,12 @@
 //
 
 #include "Model.h"
+
+#include <random>
+#include <ranges>
+
 #include "alergia.h"
+#include "TestRunner.h"
 #include "input/inputdatalocator.h"
 #include "utility/loguru.hpp"
 
@@ -38,6 +43,88 @@ double Model::predict(trace* trace) const {
     if (node->final == 0) return 0;
     prob *= static_cast<double>(node->final) / node->size;
     return prob;
+}
+
+double Model::predict(const ModelTrace &trace) const {
+
+    const ModelNode* node = &get_node(root_number);
+    double prob = 1;
+
+    for (const int symbol : trace.symbols) {
+        // Get the transition corresponding to the trace symbol
+        auto transition_maybe = node->follow(symbol);
+        // If trace follows a non-existing transition
+        if (!transition_maybe) {
+            return 0;
+        }
+        const ModelEdge& transition = transition_maybe.value().get();
+        // Update the probability
+        prob *= static_cast<double>(transition.count) / node->size;
+        // Move to the target of the transition edge
+        node = &get_node(transition.get_target());
+    }
+
+    // Now check if the trace ends in an accepting state
+    if (node->final == 0) return 0;
+    prob *= static_cast<double>(node->final) / node->size;
+    if (prob < 0 || prob > 1) {
+        std::cerr << "invalid prob: " << prob << std::endl;
+        throw std::invalid_argument("prob must be between 0 and 1");
+    }
+    return prob;
+}
+
+
+ModelTrace Model::generate_trace() const {
+
+    // Initialize variables
+    ModelTrace trace;
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    const ModelNode* current = &get_node(root_number);
+
+    // Do a random walk
+    while (true) {
+
+        // Select a random int from 0 to total node count
+        std::uniform_int_distribution dist(0, current->size - 1);
+        const int choice = dist(gen);
+
+        // Check if trace should finish in the node
+        int total = current->final;
+        if (choice < total) {
+            trace.prob *= static_cast<double>(current->final) / current->size;
+            return trace;
+        }
+
+        // Check which transition should be followed
+        for (const auto &transition: current->edges | std::views::values) {
+            total += transition.count;
+            if (choice < total) {
+                // Current transition selected
+                trace.symbols.push_back(transition.symbol);
+                trace.prob *= static_cast<double>(transition.count) / current->size;
+                current = &get_node(transition.get_target());
+                break;
+            }
+        }
+    }
+}
+
+double Model::compute_diff(const std::vector<ModelTrace> &traces) const {
+
+    std::vector<double> real;
+    std::vector<double> predicted;
+    real.reserve(traces.size());
+    predicted.reserve(traces.size());
+
+    // Collect real and predicted probabilities
+    for (const auto &trace: traces) {
+        real.push_back(trace.prob);
+        const double prediction = predict(trace);
+        predicted.push_back(prediction);
+    }
+    return compute_cross_entropy(real, predicted);
 }
 
 Model Model::from_state_merger(const int id, state_merger* merger) {

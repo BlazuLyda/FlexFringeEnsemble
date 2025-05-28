@@ -74,6 +74,11 @@ public:
 	friend class Model;
 };
 
+struct ModelTrace {
+	std::vector<int> symbols;
+	double prob = 1;
+};
+
 /**
  * This is a minimal copy of merged apta that provides the functionality of evaluating sample
  * traces. Used with the ensemble methods to keep track of trained models.
@@ -100,7 +105,14 @@ public:
 	 * @param trace the trace to be evaluated
 	 * @return 0 if impossible, >0 if trace ends up in an accepting state
 	 */
-	double predict(trace* trace) const;
+	[[nodiscard]] double predict(trace* trace) const;
+
+	/**
+	 * Returns the probability of the trace occurring in the model.
+	 * @param trace the model trace to be evaluated
+	 * @return 0 if impossible, >0 if trace ends up in an accepting state
+	 */
+	[[nodiscard]] double predict(const ModelTrace& trace) const;
 
 	[[nodiscard]] int get_id() const {
 		return id;
@@ -115,6 +127,19 @@ public:
 	}
 
 	void write_dot(std::ostream& output) const;
+
+	/**
+	 * Generates a random trace from the model using a random walk.
+	 * @return generated trace
+	 */
+	[[nodiscard]] ModelTrace generate_trace() const;
+
+	/**
+	 * Computes the average cross-entropy on the provided sample set for this model.
+	 * @param traces sample set of traces
+	 * @return cross-entropy divided by the sample set size
+	 */
+	[[nodiscard]] double compute_diff(const std::vector<ModelTrace> &traces) const;
 };
 
 #endif //FLEXFRINGE_MODEL_H

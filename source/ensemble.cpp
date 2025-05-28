@@ -28,6 +28,36 @@ double Ensemble::predict(trace* trace) const {
     return weighted_avg;
 }
 
+void Ensemble::compute_inter_model_diffs(const int sample_size) const {
+
+    std::vector<ModelTrace> sample;
+    sample.resize(sample_size);
+
+    // Compute diff for each pair of models
+    std::vector<double> diffs;
+    diffs.reserve(models.size() * models.size());
+
+    // Generate a sample of traces from each model
+    for (const auto &model: models) {
+        // Generate a sample
+        for (int i = 0; i < sample_size; i++) {
+            sample[i] = model.generate_trace();
+        }
+
+        // For all models compute a score on this set of traces
+        for (const auto &other: models) {
+            diffs.push_back(other.compute_diff(sample));
+        }
+    }
+
+    // Now output the diffs separated by ';'
+    std::cout << "diffs: ";
+    for (const double &diff: diffs) {
+        std::cout << diff << ";";
+    }
+    std::cout << std::endl;
+};
+
 /** Ensemble Factory methods **/
 refinement_list greedy(state_merger* merger) {
     std::cout << "starting greedy merging" << std::endl;
@@ -187,13 +217,10 @@ Ensemble EnsembleFactory::generate(
     return ensemble;
 }
 
-std::optional<Ensemble> EnsembleFactory::load(const std::string &model_path) {
-    // Initialize the ensemble object
-    Ensemble ensemble;
-
+int EnsembleFactory::add_model_collection(Ensemble& ensemble, const std::string &model_path, const int collection_size) {
     // Iterate through model numbers and read the model files
     int i = 1;
-    while (true) {
+    while (i - 1 != collection_size) {
         // Select the ith model
         std::string filename = model_path + ".model." + std::to_string(i) + ".json";
         namespace fs = std::filesystem;
@@ -206,7 +233,7 @@ std::optional<Ensemble> EnsembleFactory::load(const std::string &model_path) {
         const auto file_stream = std::make_unique<std::ifstream>(filename);
         if (!file_stream->is_open()) {
             std::cerr << "Unable to open file: " << filename << std::endl;
-            return std::nullopt;
+            return i - 1;
         }
         // Create the model from the file contents
         std::cout << "Loading model " << i << " from file: " << filename << std::endl;
@@ -216,6 +243,30 @@ std::optional<Ensemble> EnsembleFactory::load(const std::string &model_path) {
         ++i;
     }
 
-    std::cout << "Loaded ensemble of size " << ensemble.models.size() << " for training set: " << model_path << std::endl;
-    return ensemble;
+    std::cout << "Loaded ensemble of size " << i - 1 << " for training set: " << model_path << std::endl;
+    return i - 1;
+}
+
+int EnsembleFactory::add_single_model(Ensemble &ensemble, const std::string &model_path) {
+    // Now, load the model from the file
+    namespace fs = std::filesystem;
+
+    // Check if file exists
+    std::string filename = model_path + ".final.json";
+    if (!fs::exists(filename) || !fs::is_regular_file(filename)) {
+        std::cerr << "Single model file does not exist: " << filename << std::endl;
+        return 0;
+    }
+    // Try to open the file
+    const auto file_stream = std::make_unique<std::ifstream>(filename);
+    if (!file_stream->is_open()) {
+        std::cerr << "Unable to open file: " << filename << std::endl;
+        return 0;
+    }
+    // Create the model from the file contents
+    std::cout << "Loading single model from file: " << filename << std::endl;
+    Model model = Model::from_apta_json(ensemble.next_model_id(), *file_stream);
+    ensemble.add_model(std::move(model));
+
+    return 1;
 };
