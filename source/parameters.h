@@ -141,6 +141,7 @@ extern bool SINK_TYPE;
 
 extern int NR_ESTIMATORS;
 extern std::string ENS_MODE;
+extern std::string VOTE_STRAT;
 extern int SAMPLE_SIZE;
 extern std::string SOLUTION_FILE;
 #endif

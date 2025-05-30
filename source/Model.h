@@ -92,12 +92,12 @@ class Model {
 public:
 
 	/** constructors and initializers **/
-	explicit Model(const int id): id(id) {};
+	Model() = default;
 
 	~Model() = default;
 
-	static Model from_state_merger(int id, state_merger* merger);
-	static Model from_apta_json(int id, std::istream& input_stream);
+	static Model from_state_merger(state_merger* merger);
+	static Model from_apta_json(std::istream& input_stream);
 
 
 	/**
@@ -116,6 +116,10 @@ public:
 
 	[[nodiscard]] int get_id() const {
 		return id;
+	}
+
+	void set_id(const int id) {
+		this->id = id;
 	}
 
 	void add_node(ModelNode&& node) {

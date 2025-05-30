@@ -127,13 +127,13 @@ double Model::compute_diff(const std::vector<ModelTrace> &traces) const {
     return compute_cross_entropy(real, predicted);
 }
 
-Model Model::from_state_merger(const int id, state_merger* merger) {
+Model Model::from_state_merger(state_merger* merger) {
     // Get the apta from the merger
     apta* apta = merger->get_aut();
     apta_node* root = apta->get_root();
 
     // Create a new model
-    Model model(id);
+    Model model;
 
     // Copy all the apta nodes
     for (auto ait = merged_APTA_iterator(root); *ait != nullptr; ++ait) {
@@ -223,10 +223,10 @@ void Model::write_dot(std::ostream &out) const {
 }
 
 
-Model Model::from_apta_json(int id, std::istream &input_stream) {
+Model Model::from_apta_json(std::istream &input_stream) {
 
     json read_apta = json::parse(input_stream);
-    Model model(id);
+    Model model;
 
     // Set the root id to -1
     model.root_number = -1;

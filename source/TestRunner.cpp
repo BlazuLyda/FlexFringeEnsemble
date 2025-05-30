@@ -12,12 +12,18 @@
 
 std::optional<TestRunner<Ensemble> > TestRunner<Ensemble>::create_from_ensemble(
     const std::string &model_file,
-    const int ensemble_size
+    const int ensemble_size,
+    const std::string &strategy_str
 ) {
     // Now, load the ensemble from files
     Ensemble ensemble;
+
     if (EnsembleFactory::add_model_collection(ensemble, model_file, ensemble_size) != ensemble_size) {
-        std::cerr << "Failed to add ensemble to ensemble factory: " << model_file << std::endl;
+        std::cerr << "Failed to create ensemble from model: " << model_file << std::endl;
+        return std::nullopt;
+    }
+    if (!EnsembleFactory::load_weights(ensemble, model_file, strategy_str)) {
+        std::cerr << "Failed to load/create ensemble weights for model: " << model_file << std::endl;
         return std::nullopt;
     }
 
@@ -45,7 +51,7 @@ std::optional<TestRunner<Model>> TestRunner<Model>::create_from_model(const std:
     }
     // Create the model from the file contents
     std::cout << "Loading single model from file: " << filename << std::endl;
-    const Model model = Model::from_apta_json(1, *file_stream);
+    const Model model = Model::from_apta_json(*file_stream);
 
     // Setup output file stream
     std::ofstream output(model_file + ".single.result");
@@ -76,7 +82,7 @@ double compute_cross_entropy(const std::vector<double> &ps, const std::vector<do
     }
     // Add the average q value times the number of zeros in qs to q_sum.
     // If qs are all zeros, then just set average to arbitrary value.
-    const double q_avg = q_num_zeros != num_vals ? q_sum / (num_vals - q_num_zeros) : 1.0;
+    const double q_avg = q_num_zeros != num_vals ? q_sum / static_cast<double>(num_vals - q_num_zeros) : 1.0;
     q_sum += q_avg * q_num_zeros;
 
     // Normalization constants are inverses of sums

@@ -203,14 +203,14 @@ void run() {
         LOG_S(INFO) << "Ensemble generation mode selected, starting run";
 
         auto factory = std::make_unique<EnsembleFactory>();
-        EnsembleFactory::generate(ENS_MODE, merger, OUTPUT_FILE, NR_ESTIMATORS);
+        EnsembleFactory::generate(ENS_MODE, VOTE_STRAT, merger, OUTPUT_FILE, NR_ESTIMATORS, SAMPLE_SIZE);
 
     } else if (OPERATION_MODE == "pred_ensemble") {
         std::cout << "ensemble prediction mode selected" << std::endl;
         LOG_S(INFO) << "Ensemble prediction mode selected, starting run";
 
         if(!APTA_FILE.empty()){
-            if (auto runner_maybe = TestRunner<Ensemble>::create_from_ensemble(APTA_FILE, NR_ESTIMATORS)) {
+            if (auto runner_maybe = TestRunner<Ensemble>::create_from_ensemble(APTA_FILE, NR_ESTIMATORS, VOTE_STRAT)) {
                 if (!SOLUTION_FILE.empty()) {
                     runner_maybe.value().run(INPUT_FILE, SOLUTION_FILE);
                 } else {
@@ -253,6 +253,7 @@ void run() {
             }
             // For each model try to add it as a single. If it fails add as a collection.
             Ensemble ensemble;
+
             for (const auto& model_path : models) {
                 if (EnsembleFactory::add_single_model(ensemble, model_path) != 1) {
                     if (EnsembleFactory::add_model_collection(ensemble, model_path, NR_ESTIMATORS) != NR_ESTIMATORS) {
@@ -260,7 +261,8 @@ void run() {
                     }
                 }
             }
-            ensemble.compute_inter_model_diffs(SAMPLE_SIZE);
+            EnsembleFactory::make_weighted(ensemble, SAMPLE_SIZE);
+            EnsembleFactory::write_weights(ensemble, models.front());
         } else {
             std::cerr << "require a json formatted apta file to make predictions" << std::endl;
         }
@@ -489,7 +491,8 @@ int main(int argc, char *argv[]){
 
     // parameters for the ensemble alergia
     app.add_option("--nrestimators", NR_ESTIMATORS, "Number of estimators to be produced for the ensemble/size of the ensemble to load");
-    app.add_option("--ensmode", ENS_MODE, "Mode the ensemble should be trained with: ");
+    app.add_option("--ensmode", ENS_MODE, "Mode the ensemble should be trained with: random/greedy");
+    app.add_option("--votestrat", VOTE_STRAT, "Strategy the ensemble should use for voting: uniform/weighted");
     app.add_option("--samsize", SAMPLE_SIZE, "Size of the sample used for inter model variety check");
     app.add_option("--solution", SOLUTION_FILE, "Optional file containing solution (target) probabilities of test traces");
 

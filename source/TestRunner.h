@@ -25,6 +25,52 @@ double compute_perplexity(const std::vector<double> &ps, const std::vector<doubl
 
 double compute_cross_entropy(const std::vector<double> &ps, const std::vector<double> &qs);
 
+class ListReader {
+    std::ifstream input;
+    size_t list_size = 0;
+    size_t list_read = 0;
+
+public:
+    ListReader() = default;
+
+    ~ListReader() = default;
+
+    [[nodiscard]] size_t get_size() const {
+        return list_size;
+    }
+
+    /**
+     * Initializes the reader by opening the provided file. Reads the first line to decide the file size.
+     * @param filename file to open
+     * @return true if file was successfully opened, false otherwise
+     */
+    bool init(const std::string &filename) {
+        input.open(filename);
+        if (!input) {
+            return false;
+        }
+        if (!(input >> list_size)) {
+            return false;
+        }
+        return true;
+    }
+
+    [[nodiscard]] double read_next() {
+        if (list_read >= list_size) {
+            throw std::runtime_error("Exceeded the number of lines in the file");
+        }
+        if (double value; input >> value) {
+            ++list_read;
+            return value;
+        }
+        throw std::runtime_error("Error reading value at index " + std::to_string(list_read));
+    }
+
+    [[nodiscard]] bool has_next() const {
+        return list_read < list_size;
+    }
+};
+
 template<typename P>
 concept Predictor = requires(const P &p, trace* trace)
 {
@@ -46,9 +92,7 @@ class TestRunner {
 
     // Perplexity
     bool compute_score = false;
-    std::ifstream solutions;
-    size_t sol_total_count = 0;
-    size_t sol_read_count = 0;
+    ListReader solutions;
 
     void init_test_reader(const std::string &test_file) {
         input = std::ifstream(test_file);
@@ -71,27 +115,6 @@ class TestRunner {
         }
     }
 
-    void init_solution_reader(const std::string &solution_file) {
-        solutions.open(solution_file);
-        if (!solutions) {
-            throw std::runtime_error("Failed to open file: " + solution_file);
-        }
-        if (!(solutions >> sol_total_count)) {
-            throw std::runtime_error("Failed to read number of traces");
-        }
-    }
-
-    double read_next_solution() {
-        if (sol_read_count >= sol_total_count) {
-            throw std::runtime_error("Exceeded the number of lines in the file");
-        }
-        if (double value; solutions >> value) {
-            ++sol_read_count;
-            return value;
-        }
-        throw std::runtime_error("Error reading value at index " + std::to_string(sol_read_count));
-    }
-
 public:
     TestRunner(const T &predictor, std::ofstream &&output)
         : predictor(predictor), output(std::move(output)) {
@@ -99,10 +122,13 @@ public:
 
     ~TestRunner() = default;
 
-    static std::optional<TestRunner<Ensemble>> create_from_ensemble(const std::string &model_file, int ensemble_size);
+    static std::optional<TestRunner<Ensemble> > create_from_ensemble(
+        const std::string &model_file,
+        int ensemble_size,
+        const std::string &strategy_str
+    );
 
-    static std::optional<TestRunner<Model>> create_from_model(const std::string &model_file);
-
+    static std::optional<TestRunner<Model> > create_from_model(const std::string &model_file);
 
 
     void run(const std::string &test_file) {
@@ -121,14 +147,14 @@ public:
             const auto trace = *trace_maybe;
             const double prediction = predictor.predict(trace);
 
-            // Write the prediction to the output
-            output << prediction << std::endl;
-
-            // Optionally compare against solution
             if (compute_score) {
-                const double real = read_next_solution();
+                // Compare against solution
+                const double real = solutions.read_next();
                 real_probs.push_back(real);
                 predicted_probs.push_back(prediction);
+            } else {
+                // Write the prediction to the output
+                output << prediction << std::endl;
             }
 
             // TODO: Deleting the traces should probably also invalidate the trace pointers in inputdata,
@@ -153,7 +179,9 @@ public:
     void run(const std::string &test_file, const std::string &solution_file) {
         // Run the test file against the solutions
         compute_score = true;
-        init_solution_reader(solution_file);
+        if (!solutions.init(solution_file)) {
+            throw std::runtime_error("Error initializing solutions from file " + solution_file);
+        }
         run(test_file);
     }
 };
