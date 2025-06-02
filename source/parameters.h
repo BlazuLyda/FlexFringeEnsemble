@@ -140,8 +140,12 @@ extern bool STAR_FREE;
 extern bool SINK_TYPE;
 
 extern int NR_ESTIMATORS;
+extern int FIRST_ID;
+extern int CONTINUE_WORK;
 extern std::string ENS_MODE;
 extern std::string VOTE_STRAT;
 extern int SAMPLE_SIZE;
+extern std::string ENS_WEIGHTS;
+extern std::string ENS_MODELS;
 extern std::string SOLUTION_FILE;
 #endif

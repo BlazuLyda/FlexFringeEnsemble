@@ -18,9 +18,17 @@ std::optional<TestRunner<Ensemble> > TestRunner<Ensemble>::create_from_ensemble(
     // Now, load the ensemble from files
     Ensemble ensemble;
 
-    if (EnsembleFactory::add_model_collection(ensemble, model_file, ensemble_size) != ensemble_size) {
-        std::cerr << "Failed to create ensemble from model: " << model_file << std::endl;
-        return std::nullopt;
+    if (!ENS_MODELS.empty()) {
+        if (EnsembleFactory::add_selected_models(ensemble, model_file, ENS_MODELS) != ensemble_size) {
+            std::cerr << "Failed to create ensemble from model: " << model_file << std::endl;
+            return std::nullopt;
+        }
+    } else {
+        if (EnsembleFactory::add_model_collection(ensemble, model_file, ensemble_size) != ensemble_size) {
+            std::cerr << "Failed to create ensemble from model: " << model_file << std::endl;
+            return std::nullopt;
+        }
+
     }
     if (!EnsembleFactory::load_weights(ensemble, model_file, strategy_str)) {
         std::cerr << "Failed to load/create ensemble weights for model: " << model_file << std::endl;

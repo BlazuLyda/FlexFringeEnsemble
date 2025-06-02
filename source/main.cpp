@@ -150,7 +150,7 @@ void run() {
         eval->initialize_before_adding_traces();
         id.add_traces_to_apta(the_apta);
         eval->initialize_after_adding_traces(merger);
-        print_current_automaton(merger, OUTPUT_FILE, ".init");
+        // print_current_automaton(merger, OUTPUT_FILE, ".init");
         LOG_S(INFO) << "Greedy mode selected, starting run";
 
         // run the state merger
@@ -255,13 +255,16 @@ void run() {
             Ensemble ensemble;
 
             for (const auto& model_path : models) {
-                if (EnsembleFactory::add_single_model(ensemble, model_path) != 1) {
-                    if (EnsembleFactory::add_model_collection(ensemble, model_path, NR_ESTIMATORS) != NR_ESTIMATORS) {
-                        std::cerr << "Could not load model: " << model_path << std::endl;
-                    }
+                // if (EnsembleFactory::add_single_model(ensemble, model_path) != 1) {
+                //     if (EnsembleFactory::add_model_collection(ensemble, model_path, NR_ESTIMATORS) != NR_ESTIMATORS) {
+                //         std::cerr << "Could not load model: " << model_path << std::endl;
+                //     }
+                // }
+                if (EnsembleFactory::add_model_collection(ensemble, model_path, NR_ESTIMATORS) != NR_ESTIMATORS) {
+                    std::cerr << "Could not load model: " << model_path << std::endl;
                 }
             }
-            EnsembleFactory::make_weighted(ensemble, SAMPLE_SIZE);
+            EnsembleFactory::compute_diffs(ensemble, SAMPLE_SIZE, VOTE_STRAT);
             EnsembleFactory::write_weights(ensemble, models.front());
         } else {
             std::cerr << "require a json formatted apta file to make predictions" << std::endl;
@@ -490,10 +493,14 @@ int main(int argc, char *argv[]){
     app.add_option("--futuresteps", NSTEPS_SKETCHES, "Number of steps into future when storing future in sketches. Default: 2.");
 
     // parameters for the ensemble alergia
-    app.add_option("--nrestimators", NR_ESTIMATORS, "Number of estimators to be produced for the ensemble/size of the ensemble to load");
+    app.add_option("--nrestimators", NR_ESTIMATORS, "Number of estimators to be produced for the ensemble/size of the ensemble to load. Default: 10.");
+    app.add_option("--first-id", FIRST_ID, "The first model number of the created ensemble (for splitting work between processes). Default: 0.");
+    app.add_option("--continue-work", CONTINUE_WORK, "When set to 1, ensemble creation does not overwrite already existing models. Default: 0.");
     app.add_option("--ensmode", ENS_MODE, "Mode the ensemble should be trained with: random/greedy");
-    app.add_option("--votestrat", VOTE_STRAT, "Strategy the ensemble should use for voting: uniform/weighted");
+    app.add_option("--votestrat", VOTE_STRAT, "Strategy the ensemble should use for voting: uniform/random/weighted/precomputed");
     app.add_option("--samsize", SAMPLE_SIZE, "Size of the sample used for inter model variety check");
+    app.add_option("--weights", ENS_WEIGHTS, "Precomputed ensemble weights, separated with ;. Use with --votestrat precomputed");
+    app.add_option("--ensmodels", ENS_MODELS, "Only use these model numbers, separated with ; for testing. Doesn't work well with --votestrat weighted");
     app.add_option("--solution", SOLUTION_FILE, "Optional file containing solution (target) probabilities of test traces");
 
     CLI11_PARSE(app, argc, argv)

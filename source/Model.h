@@ -77,6 +77,16 @@ public:
 struct ModelTrace {
 	std::vector<int> symbols;
 	double prob = 1;
+	unsigned int hash = 0;
+
+	unsigned int get_hash() {
+		if (hash != 0) return hash;
+		for (const int sym: symbols) {
+			constexpr unsigned int base = 131;
+			hash = hash * base + sym;
+		}
+		return hash;
+	}
 };
 
 /**
@@ -118,8 +128,8 @@ public:
 		return id;
 	}
 
-	void set_id(const int id) {
-		this->id = id;
+	void set_id(const int id_to_set) {
+		id = id_to_set;
 	}
 
 	void add_node(ModelNode&& node) {

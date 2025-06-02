@@ -128,8 +128,12 @@ int DIFF_MAX_LENGTH = 50;
 double DIFF_MIN = -100.0;
 
 int NR_ESTIMATORS = 0;
+int FIRST_ID = 0;
+int CONTINUE_WORK = 0;
 std::string ENS_MODE;
 std::string VOTE_STRAT;
 int SAMPLE_SIZE = 100;
+std::string ENS_WEIGHTS;
+std::string ENS_MODELS;
 std::string SOLUTION_FILE;
 

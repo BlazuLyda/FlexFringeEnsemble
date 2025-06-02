@@ -30,6 +30,7 @@ double Ensemble::predict(trace* trace) const {
 
 std::vector<double> Ensemble::compute_models_cross_entropy(const int sample_size) const {
     std::vector<ModelTrace> sample;
+    std::unordered_set<unsigned int> usedTracesHashes; // For keeping track of the unique traces
     sample.resize(sample_size);
 
     // Compute diff for each pair of models
@@ -38,10 +39,17 @@ std::vector<double> Ensemble::compute_models_cross_entropy(const int sample_size
 
     // Generate a sample of traces from each model
     for (const auto &model: models) {
-        // Generate a sample
+        // Generate a sample of unique traces
         for (int i = 0; i < sample_size; i++) {
-            sample[i] = model.generate_trace();
+            ModelTrace trace = model.generate_trace();
+            while (usedTracesHashes.contains(trace.get_hash())) {
+                trace = model.generate_trace();
+            }
+            usedTracesHashes.insert(trace.get_hash());
+            sample[i] = std::move(trace);
         }
+        // Clear the hash map
+        usedTracesHashes.clear();
 
         // For all models compute a score on this set of traces
         for (const auto &other: models) {
@@ -64,17 +72,40 @@ void Ensemble::set_equal_weights() {
     weights.resize(size, w);
 }
 
-void Ensemble::compute_weights(const int sample_size) {
-    // If uniform, just set all weights to equal
-    if (voting_strategy == Uniform) {
-        set_equal_weights();
-        return;
+void Ensemble::set_random_weights() {
+    std::random_device rd;
+    std::mt19937 gen(rd() ^ std::chrono::high_resolution_clock::now().time_since_epoch().count());
+    // Seed with non-deterministic randomness
+    std::exponential_distribution exp_dist(1.0);
+
+    weights.resize(size);
+    double sum = 0;
+
+    for (int i = 0; i < size; ++i) {
+        weights[i] = exp_dist(gen); // Sample exponential(1)
+        sum += weights[i];
+    }
+    for (double &w: weights) {
+        w /= sum; // Normalize to sum to 1
     }
 
+    // Now output the weights separated by ';'
+    std::cout << "weights: ";
+    for (const double &w: weights) {
+        std::cout << w << ";";
+    }
+    std::cout << std::endl;
+}
+
+void Ensemble::set_best_fit_weights(const int sample_size) {
     // Flat array representing the sample cross-entropy matrix, should have length n**2
     const int n = static_cast<int>(models.size());
     std::vector<double> H_flat = compute_models_cross_entropy(sample_size);
     assert(H_flat.size() == n * n);
+    // Exit early if computing weights not needed
+    if (voting_strategy != VoteStrat::Weighted) {
+        return;
+    }
 
     // Lambda function for 2d index to 1d index
     auto index1d = [n](const int row_nr, const int col_nr) constexpr {
@@ -261,8 +292,8 @@ Ensemble EnsembleFactory::generate(
     const int sample_size
 ) {
     // Get the modes from the parameters
-    const GenerationMode mode = stringToMode(mode_str);
-    const VotingStrategy strategy = stringToVotingStrategy(strategy_str);
+    const GenMode mode = stringToMode(mode_str);
+    const VoteStrat strategy = stringToVotingStrategy(strategy_str);
     std::cout << "Starting the creation of ensemble with mode: " << modeToString(mode) << std::endl;
     std::cout << "Selected voting strategy: " << votingStrategyToString(strategy) << std::endl;
 
@@ -272,14 +303,29 @@ Ensemble EnsembleFactory::generate(
     ensemble.models.reserve(nr_estimators);
     std::cout << "Creating ensemble of size: " << nr_estimators << std::endl;
 
-    for (int i = 1; i <= nr_estimators; ++i) {
+    for (int i = 0; i < nr_estimators; ++i) {
+
+        // Mode number is the FIRST_ID of this session plus the number of already generated models
+        const std::string model_number = std::to_string(FIRST_ID + i);
+        const std::string json_file = output_file + ".model." + model_number + ".json";
+        const std::string dot_file = output_file + ".model." + model_number + ".dot";
+
+        // If the option to continue previous work is set, then check if model already exists
+        if (CONTINUE_WORK) {
+            if (auto input_maybe = open_file(json_file)) {
+                ensemble.add_model(Model::from_apta_json(input_maybe.value()));
+                std::cout << "Read already created model " << model_number << ": " << i+1 << "/" << nr_estimators << std::endl;
+                continue;
+            }
+        }
+
         // Train next model
         auto all_refs = refinements_by_mode(mode, merger);
 
         // Save the model to a file
-        merger->print_json(output_file + ".model." + std::to_string(i) + ".json");
-        merger->print_dot(output_file + ".model." + std::to_string(i) + ".dot");
-        std::cout << "Created model " << i << "/" << nr_estimators << std::endl;
+        merger->print_json(json_file);
+        merger->print_dot(dot_file);
+        std::cout << "Created model " << model_number << ": " << i+1 << "/" << nr_estimators << std::endl;
 
         // Create the model object for further evaluation
         ensemble.add_model(std::move(Model::from_state_merger(merger)));
@@ -293,10 +339,11 @@ Ensemble EnsembleFactory::generate(
         }
     }
 
-    // Compute the weights of the ensemble
-    ensemble.compute_weights(sample_size);
-    // Save the weights to a file
-    write_weights(ensemble, output_file);
+    // Compute and set the weights of the ensemble
+    if (ensemble.voting_strategy == VoteStrat::Weighted) {
+        ensemble.set_best_fit_weights(sample_size);
+        write_weights(ensemble, output_file);
+    }
 
     std::cout << "Successfully created ensemble" << std::endl;
     return ensemble;
@@ -306,10 +353,9 @@ int EnsembleFactory::add_model_collection(Ensemble &ensemble, const std::string 
                                           const int collection_size) {
     // Iterate through model numbers and read the model files
     int i = 0;
-    while (i != collection_size) {
-
+    while (i < collection_size) {
         // Select the ith model
-        std::string filename = model_path + ".model." + std::to_string(i + 1) + ".json";
+        std::string filename = model_path + ".model." + std::to_string(i) + ".json";
         // Open the file
         auto input_maybe = open_file(filename);
         if (!input_maybe) {
@@ -323,15 +369,34 @@ int EnsembleFactory::add_model_collection(Ensemble &ensemble, const std::string 
         ++i;
     }
     std::cout << "Loaded ensemble of size " << i << " for training set: " << model_path << std::endl;
+    assert(ensemble.models.size() == collection_size);
     return i;
 }
 
-int EnsembleFactory::add_single_model(Ensemble &ensemble, const std::string &model_path) {
+int EnsembleFactory::add_selected_models(Ensemble &ensemble, const std::string &model_path, const std::string &models_str) {
+
+    // Extract the model nums
+    std::vector<std::string> model_nums;
+    for (auto part : std::views::split(models_str, ';')) {
+        model_nums.emplace_back(part.begin(), part.end());
+    }
+
+    // Iterate through model numbers and read the model files
+    for (const std::string& model_num : model_nums) {
+        // Select the ith model
+        std::string full_model_path = model_path + ".model." + model_num + ".json";
+        // Add the model from the file to the ensemble
+        add_single_model(ensemble, full_model_path);
+    }
+    std::cout << "Loaded ensemble of size " << model_nums.size() << " for training set: " << model_path << std::endl;
+    return static_cast<int>(model_nums.size());
+}
+
+int EnsembleFactory::add_single_model(Ensemble &ensemble, const std::string &full_model_path) {
     // Check if file exists
-    const std::string filename = model_path + ".final.json";
-    if (auto input_maybe = open_file(filename)) {
+    if (auto input_maybe = open_file(full_model_path)) {
         // Create the model from the file contents
-        std::cout << "Loading single model from file: " << filename << std::endl;
+        std::cout << "Loading single model from file: " << full_model_path << std::endl;
 
         Model model = Model::from_apta_json(input_maybe.value());
         ensemble.add_model(std::move(model));
@@ -341,17 +406,33 @@ int EnsembleFactory::add_single_model(Ensemble &ensemble, const std::string &mod
 }
 
 bool EnsembleFactory::load_weights(Ensemble &ensemble, const std::string &model_path, const std::string &strategy_str) {
+
     // Begin with setting the ensemble voting strategy
     ensemble.voting_strategy = stringToVotingStrategy(strategy_str);
     // std::cout << "Loading weights for strategy: " << strategy_str << " decoded to: " << votingStrategyToString(ensemble.voting_strategy) << std::endl;
 
-    // If the voting strategy is Uniform, just set equal weights
-    if (ensemble.voting_strategy == Uniform) {
-        std::cout << "Setting uniform weights for model " << model_path << std::endl;
-        ensemble.set_equal_weights();
-        return true;
+    switch (ensemble.voting_strategy) {
+        case VoteStrat::Uniform:
+            std::cout << "Setting uniform weights for model: " << model_path << std::endl;
+            ensemble.set_equal_weights();
+            return true;
+        case VoteStrat::Random:
+            std::cout << "Setting random weights for model: " << model_path << std::endl;
+            ensemble.set_random_weights();
+            return true;
+        case VoteStrat::Weighted:
+            return load_weights_from_file(ensemble, model_path);
+        case VoteStrat::Precomputed:
+            if (ENS_WEIGHTS.empty()) {
+                std::cerr << "Must provide weights as params when using precomputed voting strategy" << std::endl;
+                return false;
+            }
+            return load_weights_from_params(ensemble, ENS_WEIGHTS);
     }
+    return false;
+}
 
+bool EnsembleFactory::load_weights_from_file(Ensemble &ensemble, const std::string &model_path) {
     // Open the weights file
     const std::string filename = model_path + ".weights.txt";
     ListReader weights_reader;
@@ -379,10 +460,35 @@ bool EnsembleFactory::load_weights(Ensemble &ensemble, const std::string &model_
     return true;
 }
 
-void EnsembleFactory::write_weights(const Ensemble& ensemble, const std::string& model_path) {
+bool EnsembleFactory::load_weights_from_params(Ensemble &ensemble, const std::string &weight_str) {
 
-    if (ensemble.voting_strategy == Uniform) {
-        std::cout << "Skipping writing weights file for ensemble with uniform voting strategy." << std::endl;
+    std::cout << "Reading weights from parameters" << std::endl;
+
+    // Split the weights string into array of weight values
+    std::vector<std::string> weights_vec;
+    weights_vec.reserve(ensemble.size);
+    for (auto part : std::views::split(weight_str, ';')) {
+        weights_vec.emplace_back(part.begin(), part.end());
+    }
+    // Check if the number of weights matches number of models
+    if (weights_vec.size() != ensemble.size) {
+        std::cerr << "Weights parameter has mismatched number of values: " << weights_vec.size() << std::endl;
+        return false;
+    }
+
+    // Parse the values
+    ensemble.weights.reserve(ensemble.size);
+    for (const std::string& str_value : weights_vec) {
+        ensemble.weights.emplace_back(std::stoi(str_value));
+    }
+    return true;
+}
+
+
+
+void EnsembleFactory::write_weights(const Ensemble &ensemble, const std::string &model_path) {
+    if (ensemble.voting_strategy != VoteStrat::Weighted) {
+        std::cout << "Skipping writing weights file for ensemble with voting strategy: " << votingStrategyToString(ensemble.voting_strategy) << std::endl;
         return;
     }
 
@@ -397,7 +503,7 @@ void EnsembleFactory::write_weights(const Ensemble& ensemble, const std::string&
     // First line: number of weights
     out << ensemble.weights.size() << std::endl;
     // One weight per line
-    for (const double weight : ensemble.weights) {
+    for (const double weight: ensemble.weights) {
         out << weight << std::endl;
     }
 }
