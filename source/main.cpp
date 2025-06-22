@@ -255,13 +255,10 @@ void run() {
             Ensemble ensemble;
 
             for (const auto& model_path : models) {
-                // if (EnsembleFactory::add_single_model(ensemble, model_path) != 1) {
-                //     if (EnsembleFactory::add_model_collection(ensemble, model_path, NR_ESTIMATORS) != NR_ESTIMATORS) {
-                //         std::cerr << "Could not load model: " << model_path << std::endl;
-                //     }
-                // }
-                if (EnsembleFactory::add_model_collection(ensemble, model_path, NR_ESTIMATORS) != NR_ESTIMATORS) {
-                    std::cerr << "Could not load model: " << model_path << std::endl;
+                if (EnsembleFactory::add_single_model(ensemble, model_path + ".final.json") != 1) {
+                    if (EnsembleFactory::add_model_collection(ensemble, model_path, NR_ESTIMATORS) != NR_ESTIMATORS) {
+                        std::cerr << "Could not load model: " << model_path << std::endl;
+                    }
                 }
             }
             EnsembleFactory::compute_diffs(ensemble, SAMPLE_SIZE, VOTE_STRAT);

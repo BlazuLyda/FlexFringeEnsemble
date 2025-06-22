@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <ranges>
 #include <fstream>
+#include <future>
 #include <random>
 
 #include "refinement.h"
@@ -28,29 +29,38 @@ double Ensemble::predict(trace* trace) const {
     return prediction;
 }
 
-std::vector<double> Ensemble::compute_models_cross_entropy(const int sample_size) const {
-    std::vector<ModelTrace> sample;
-    std::unordered_set<unsigned int> usedTracesHashes; // For keeping track of the unique traces
-    sample.resize(sample_size);
+std::vector<double> Ensemble::predict_all(const std::vector<trace*> &traces) const {
 
+    // Predict asynchronously
+    std::vector<std::future<std::vector<double>>> futures; // Vector of tasks which return a vector of predictions
+
+    for (const auto &model: models) {
+        futures.push_back(std::async(std::launch::async, [&model, &traces] {
+            return model.predict_all(traces);
+        }));
+    }
+
+    // Here aggregate the results
+    std::vector<double> predictions(traces.size(), 0.0);
+    for (size_t m = 0; m < models.size(); ++m) {
+        const auto local_predictions = futures[m].get(); // waits for completion
+        const double weight = weights.at(m);
+
+        for (size_t i = 0; i < traces.size(); ++i) {
+            predictions[i] += local_predictions[i] * weight;
+        }
+    }
+    return predictions;
+}
+
+std::vector<double> Ensemble::compute_models_cross_entropy(const int sample_size) const {
     // Compute diff for each pair of models
     std::vector<double> diffs;
     diffs.reserve(models.size() * models.size());
 
     // Generate a sample of traces from each model
     for (const auto &model: models) {
-        // Generate a sample of unique traces
-        for (int i = 0; i < sample_size; i++) {
-            ModelTrace trace = model.generate_trace();
-            while (usedTracesHashes.contains(trace.get_hash())) {
-                trace = model.generate_trace();
-            }
-            usedTracesHashes.insert(trace.get_hash());
-            sample[i] = std::move(trace);
-        }
-        // Clear the hash map
-        usedTracesHashes.clear();
-
+        std::vector<ModelTrace> sample = model.generate_trace_set(sample_size);
         // For all models compute a score on this set of traces
         for (const auto &other: models) {
             diffs.push_back(other.compute_diff(sample));
@@ -369,7 +379,6 @@ int EnsembleFactory::add_model_collection(Ensemble &ensemble, const std::string 
         ++i;
     }
     std::cout << "Loaded ensemble of size " << i << " for training set: " << model_path << std::endl;
-    assert(ensemble.models.size() == collection_size);
     return i;
 }
 
@@ -402,6 +411,7 @@ int EnsembleFactory::add_single_model(Ensemble &ensemble, const std::string &ful
         ensemble.add_model(std::move(model));
         return 1;
     }
+    std::cout << "Could not load single model: " << full_model_path << std::endl;
     return 0;
 }
 

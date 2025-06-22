@@ -71,6 +71,17 @@ public:
 		return std::cref(it->second);
 	}
 
+	[[nodiscard]] double get_final_prob() const {
+		return static_cast<double>(final) / static_cast<double>(size);
+	}
+
+	[[nodiscard]] double get_trans_prob(const int symbol) const {
+		if (edges.contains(symbol)) {
+			return static_cast<double>(edges.at(symbol).count) / static_cast<double>(size);
+		}
+		return 0.0;
+	}
+
 	friend class Model;
 };
 
@@ -117,6 +128,8 @@ public:
 	 */
 	[[nodiscard]] double predict(trace* trace) const;
 
+	[[nodiscard]] std::vector<double> predict_all(const std::vector<trace*> &traces) const;
+
 	/**
 	 * Returns the probability of the trace occurring in the model.
 	 * @param trace the model trace to be evaluated
@@ -147,6 +160,12 @@ public:
 	 * @return generated trace
 	 */
 	[[nodiscard]] ModelTrace generate_trace() const;
+
+	/**
+	 * Generate a set of n most probable traces from the model.
+	 * @return generated traces
+	 */
+	[[nodiscard]] std::vector<ModelTrace> generate_trace_set(int num_traces) const;
 
 	/**
 	 * Computes the average cross-entropy on the provided sample set for this model.

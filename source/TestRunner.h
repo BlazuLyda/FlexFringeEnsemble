@@ -66,15 +66,24 @@ public:
         throw std::runtime_error("Error reading value at index " + std::to_string(list_read));
     }
 
+    [[nodiscard]] std::vector<double> read_to_end() {
+        std::vector<double> values;
+        values.reserve(list_size - list_read);
+        while (has_next()) {
+            values.push_back(read_next());
+        }
+        return values;
+    }
+
     [[nodiscard]] bool has_next() const {
         return list_read < list_size;
     }
 };
 
 template<typename P>
-concept Predictor = requires(const P &p, trace* trace)
+concept Predictor = requires(const P &p, std::vector<trace*> &traces)
 {
-    { p.predict(trace) } -> std::convertible_to<double>;
+    { p.predict_all(traces) } -> std::convertible_to<std::vector<double>>;
 };
 
 template<Predictor T>
@@ -134,39 +143,37 @@ public:
     void run(const std::string &test_file) {
         // Init the test file reader
         init_test_reader(test_file);
-
         inputdata idat = inputdata::with_alphabet_from(*inputdata_locator::get());
 
+        // Collect the traces
+        std::vector<trace*> traces;
         std::optional<trace *> trace_maybe = idat.read_trace(*test_parser, *test_reader_strategy);
-
-        // For computing perplexity
-        std::vector<double> real_probs;
-        std::vector<double> predicted_probs;
-
         while (trace_maybe) {
             const auto trace = *trace_maybe;
-            const double prediction = predictor.predict(trace);
-
-            if (compute_score) {
-                // Compare against solution
-                const double real = solutions.read_next();
-                real_probs.push_back(real);
-                predicted_probs.push_back(prediction);
-            } else {
-                // Write the prediction to the output
-                output << prediction << std::endl;
-            }
-
-            // TODO: Deleting the traces should probably also invalidate the trace pointers in inputdata,
-            //  but since we have a separate inputdata local to this function it is sort of ok here?
-            trace->erase();
+            traces.push_back(trace);
             trace_maybe = idat.read_trace(*test_parser, *test_reader_strategy);
         }
 
-        // Optionally compute perplexity
+        // Collect the predictions
+        const std::vector<double> predicted_probs = predictor.predict_all(traces);
+
         if (compute_score) {
+            // Collect answers
+            const std::vector<double> real_probs = solutions.read_to_end();
+            assert (real_probs.size() == predicted_probs.size());
+            // Compute the score
             const double perplexity = compute_perplexity(real_probs, predicted_probs);
             std::cout << "Final perplexity: " << perplexity << std::endl;
+        } else {
+            // Output all the predictions
+            for (const auto prediction: predicted_probs) {
+                output << prediction << std::endl;
+            }
+        }
+
+        // Invalidate all the traces?
+        for (const auto trace : traces) {
+            trace->erase();
         }
     }
 

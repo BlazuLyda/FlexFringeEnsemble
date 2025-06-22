@@ -61,6 +61,8 @@ public:
      */
     [[nodiscard]] double predict(trace* trace) const;
 
+    [[nodiscard]] std::vector<double> predict_all(const std::vector<trace*> &traces) const;
+
     /**
      * Computes pairwise sample cross entropy score between the models of the ensemble. For each model
      * it creates a kind of sample set of size sample_size. The set consists of unique traces generated

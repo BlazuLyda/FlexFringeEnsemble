@@ -63,15 +63,14 @@ else()
 endif()
 
 
+find_package(Threads REQUIRED)
 target_link_libraries(flexfringe
         Source
         Util
         lexy
-        fmt)
-
-
-find_package(Threads)
-target_link_libraries(flexfringe ${CMAKE_THREAD_LIBS_INIT}) # For pthreads
+        fmt
+        Threads::Threads
+)
 
 if(NOT WIN32)
     target_link_libraries(flexfringe dl) # For ldl

@@ -31,7 +31,7 @@ double Model::predict(trace* trace) const {
         }
         const ModelEdge& transition = transition_maybe.value().get();
         // Update the probability
-        prob *= static_cast<double>(transition.count) / node->size;
+        prob *= node->get_trans_prob(trace_it->get_symbol());
         // Move to the target of the transition edge
         node = &get_node(transition.get_target());
         // std::cout << "Followed to node: " << node_it->number << ", with path: " << trace_it->get_symbol() << std::endl;
@@ -41,8 +41,16 @@ double Model::predict(trace* trace) const {
     // Now check if the trace ends in an accepting state
     // std::cout << "Finished in node: " << node_it->number << " with final count: " << node_it->final << std::endl;
     if (node->final == 0) return 0;
-    prob *= static_cast<double>(node->final) / node->size;
+    prob *= node->get_final_prob();
     return prob;
+}
+
+std::vector<double> Model::predict_all(const std::vector<trace*> &traces) const {
+    std::vector<double> probs(traces.size());
+    for (int i = 0; i < traces.size(); i++) {
+        probs[i] = predict(traces[i]);
+    }
+    return probs;
 }
 
 double Model::predict(const ModelTrace &trace) const {
@@ -59,14 +67,14 @@ double Model::predict(const ModelTrace &trace) const {
         }
         const ModelEdge& transition = transition_maybe.value().get();
         // Update the probability
-        prob *= static_cast<double>(transition.count) / node->size;
+        prob *= node->get_trans_prob(symbol);
         // Move to the target of the transition edge
         node = &get_node(transition.get_target());
     }
 
     // Now check if the trace ends in an accepting state
     if (node->final == 0) return 0;
-    prob *= static_cast<double>(node->final) / node->size;
+    prob *= node->get_final_prob();
     if (prob < 0 || prob > 1) {
         std::cerr << "invalid prob: " << prob << std::endl;
         throw std::invalid_argument("prob must be between 0 and 1");
@@ -109,6 +117,80 @@ ModelTrace Model::generate_trace() const {
             }
         }
     }
+}
+
+
+std::vector<ModelTrace> Model::generate_trace_set(const int num_traces) const {
+
+    std::vector<ModelTrace> traces;
+    traces.reserve(num_traces);
+
+    // We will perform the Dijkstra algorithm to find n traces with the highest probability.
+    //
+    // The priority queue will hold trace tails sorted by their probability - from highest to lowest.
+    // If a tail with symbol -1 (symbolizing finished) is popped off the priority queue, the whole trace
+    // is reconstructed by backtracking the "tails" vector. The trace is then added to the collected traces.
+    // If a tail with symbol other than -1 is popped, then all trace candidates from the node this trace
+    // finished at are enqueued with appropriate updated probabilities.
+
+    // Keep track of the trace probability, the last symbol of the trace, the id of
+    // the previous trace, and the current state.
+    struct TraceTail {
+        double prob = 1.0;
+        int node_id = -1;
+        int symbol = -1; // -1 is the finished symbol, -2 is the null symbol
+        int own_idx = -1; // index of this tail in the "tails" vector
+    };
+    auto compare = [](const TraceTail &a, const TraceTail &b) {
+        return a.prob < b.prob; // Biggest probability first
+    };
+    // To keep track of currently considered tails
+    std::priority_queue<TraceTail, std::vector<TraceTail>, decltype(compare)> trace_queue(compare);
+    // To keep track of all tails
+    std::vector<std::pair<int, int>> tails;
+
+    // Add initial empty trace
+    trace_queue.emplace(1.0, root_number, -2, -1);
+
+    // Collect the traces
+    while (traces.size() < num_traces) {
+        const auto [prob, node_id, symbol, own_idx] = trace_queue.top();
+        trace_queue.pop();
+
+        // Add a finished trace to the list of traces
+        if (symbol == -1) {
+            // Collect the symbols
+            std::vector<int> symbols;
+            int current = own_idx;
+            while (current != -1) {
+                symbols.push_back(tails[current].first);
+                current = tails[current].second;
+            }
+            // Reverse the symbols
+            for (int i = 0; i < symbols.size() / 2; i++) {
+                std::swap(symbols[i], symbols[symbols.size() - i - 1]);
+            }
+            traces.emplace_back(symbols, prob, 0);
+            continue;
+        }
+
+        // Add new traces for an unfinished trace
+        const auto& node = nodes.at(node_id);
+        if (node.final > 0) {
+            trace_queue.emplace(node.get_final_prob() * prob, node_id, -1, own_idx);
+        }
+        for (const auto &edge: node.edges | std::views::values) {
+            if (edge.count == 0) continue;
+            trace_queue.emplace(
+                node.get_trans_prob(edge.symbol) * prob,
+                edge.target_nr,
+                edge.symbol,
+                tails.size()
+            );
+            tails.emplace_back(edge.symbol, own_idx);
+        }
+    }
+    return traces;
 }
 
 double Model::compute_diff(const std::vector<ModelTrace> &traces) const {

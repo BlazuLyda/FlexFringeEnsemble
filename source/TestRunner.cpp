@@ -36,7 +36,7 @@ std::optional<TestRunner<Ensemble> > TestRunner<Ensemble>::create_from_ensemble(
     }
 
     // Setup output file stream
-    std::ofstream output(model_file + ".ensemble.result");
+    std::ofstream output(OUTPUT_FILE);
 
     return std::make_optional<TestRunner>(ensemble, std::move(output));
 }
@@ -62,7 +62,7 @@ std::optional<TestRunner<Model>> TestRunner<Model>::create_from_model(const std:
     const Model model = Model::from_apta_json(*file_stream);
 
     // Setup output file stream
-    std::ofstream output(model_file + ".single.result");
+    std::ofstream output(OUTPUT_FILE);
 
     return std::make_optional<TestRunner>(model, std::move(output));
 }
@@ -88,9 +88,9 @@ double compute_cross_entropy(const std::vector<double> &ps, const std::vector<do
             q_num_zeros++;
         }
     }
-    // Add the average q value times the number of zeros in qs to q_sum.
-    // If qs are all zeros, then just set average to arbitrary value.
+    // Compute the average of qs. If qs are all zeros, then just set average to arbitrary value.
     const double q_avg = q_num_zeros != num_vals ? q_sum / static_cast<double>(num_vals - q_num_zeros) : 1.0;
+    // Add the average q value times the number of zeros in qs to q_sum.
     q_sum += q_avg * q_num_zeros;
 
     // Normalization constants are inverses of sums
@@ -102,7 +102,11 @@ double compute_cross_entropy(const std::vector<double> &ps, const std::vector<do
     // Compute cross-entropy
     double cross_entropy = 0;
     for (int i = 0; i < num_vals; i++) {
-        cross_entropy -= ps[i] * log2(std::max(q_avg, qs[i]) * Nq);
+        if (qs[i] == 0.0) {
+            cross_entropy -= ps[i] * log2(q_avg * Nq);
+        } else {
+            cross_entropy -= ps[i] * log2(qs[i] * Nq);
+        }
         // std::printf("%d: p=%.6f q=%.6f, ce=%.6f\n", i, ps[i], qs[i], cross_entropy);
     }
     cross_entropy *= Np;
